@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 use Modern::Perl;
-use Test::More;
+use Test::More tests => 2;
 use Test::Exception;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
@@ -24,10 +24,11 @@ BEGIN {
 }
 
 subtest 'run() tests' => sub {
+
+    plan tests => 2;
+
     lives_ok { GitBz::Git->run( 'status', '--porcelain' ) } 'Git status runs';
 
     my $result = GitBz::Git->run( 'rev-parse', 'HEAD' );
     like( $result, qr/^[a-f0-9]{40}$/, 'Returns commit hash' );
 };
-
-done_testing;
