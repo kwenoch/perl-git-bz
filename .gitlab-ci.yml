@@ -18,7 +18,7 @@ test:
   before_script:
     - cpanm --installdeps --notest .
   script:
-    - prove -lr t/
+    - prove -lr t/ --harness=TAP::Harness::JUnit
   artifacts:
     reports:
       junit: junit.xml
