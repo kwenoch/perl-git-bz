@@ -41,8 +41,20 @@ sub new {
     );
 
     # Auto-login if credentials available
-    if ( $ENV{BUGZILLA_USER} && $ENV{BUGZILLA_PASSWORD} ) {
-        $client->login( $ENV{BUGZILLA_USER}, $ENV{BUGZILLA_PASSWORD} );
+    my $username = $ENV{BUGZILLA_USER};
+    my $password = $ENV{BUGZILLA_PASSWORD};
+
+    # Try git config if env vars not set
+    if ( !$username || !$password ) {
+        my $tracker_section = qq{bz-tracker "$tracker"};
+        my $tracker_config  = $config->{config}->{$tracker_section};
+
+        $username ||= $tracker_config->{'bz-user'}     if $tracker_config;
+        $password ||= $tracker_config->{'bz-password'} if $tracker_config;
+    }
+
+    if ( $username && $password ) {
+        $client->login( $username, $password );
     }
 
     return bless {

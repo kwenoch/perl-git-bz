@@ -46,14 +46,11 @@ sub new {
 sub login {
     my ( $self, $username, $password ) = @_;
 
-    my $response = $self->{ua}->post(
-        $self->{base_url} . '/login',
-        Content_Type => 'application/json',
-        Content      => encode_json(
-            {
-                login    => $username,
-                password => $password
-            }
+    my $response = $self->{ua}->get(
+        sprintf(
+            "%s/login?login=%s&password=%s",
+            $self->{base_url}, $username,
+            $password
         )
     );
 

@@ -27,14 +27,6 @@ my $DEFAULT_CONFIG = {
         'default-product'  => 'Koha',
         path               => '/bugzilla3',
     },
-    'bugzilla.gnome.org' => {
-        https              => 1,
-        'default-priority' => 'Normal',
-    },
-    'bugs.freedesktop.org' => {
-        https              => 1,
-        'default-priority' => 'medium',
-    },
 };
 
 my $GIT_CONFIG = {
@@ -46,7 +38,7 @@ my $GIT_CONFIG = {
 sub load {
     my ($class) = @_;
 
-    my $config_file = File::HomeDir->my_home . '/.gitbzrc';
+    my $config_file = File::HomeDir->my_home . '/.gitconfig';
     my $config      = -f $config_file ? Config::Tiny->read($config_file) : {};
 
     # Load git config
