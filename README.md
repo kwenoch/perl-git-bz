@@ -51,7 +51,3 @@ git bz edit HEAD~2..HEAD
 - `apply` - Apply patches from a bug ✅
 - `attach` - Attach commits as patches to a bug ✅  
 - `edit` - Edit bug details and add comments ✅
-- `file` - File a new bug ❌
-- `push` - Push commits and update bugs ❌
-- `components` - List bug components ❌
-- `add-url` - Add bug URLs to commits ❌
