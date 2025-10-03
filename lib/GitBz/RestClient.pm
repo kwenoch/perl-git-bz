@@ -16,6 +16,7 @@ package GitBz::RestClient;
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
+
 use LWP::UserAgent;
 use JSON;
 use MIME::Base64;
@@ -39,6 +40,8 @@ sub new {
         ua       => $ua,
         base_url => $base_url,
         token    => undef,
+        username => $args{username},
+        password => $args{password},
         %args
     }, $class;
 }
@@ -46,11 +49,14 @@ sub new {
 sub login {
     my ( $self, $username, $password ) = @_;
 
+    $self->{username} = $username if $username;
+    $self->{password} = $password if $password;
+
     my $response = $self->{ua}->get(
         sprintf(
             "%s/login?login=%s&password=%s",
-            $self->{base_url}, $username,
-            $password
+            $self->{base_url}, $self->{username},
+            $self->{password}
         )
     );
 
@@ -61,6 +67,19 @@ sub login {
     }
 
     GitBz::Exception::Bugzilla->throw( "Login failed: " . $response->status_line );
+}
+
+sub get_token {
+    my ($self) = @_;
+    
+    return $self->{token} if $self->{token};
+    
+    if ($self->{username} && $self->{password}) {
+        $self->login();
+        return $self->{token};
+    }
+    
+    return undef;
 }
 
 sub get_bug {
@@ -106,7 +125,8 @@ sub add_attachment {
     };
 
     $payload->{comment} = $opts{comment} if $opts{comment};
-    $payload->{token}   = $self->{token} if $self->{token};
+    my $token = $self->get_token();
+    $payload->{token} = $token if $token;
 
     my $response = $self->{ua}->post(
         $url,
@@ -131,7 +151,8 @@ sub update_bug {
         %params
     };
 
-    $payload->{token} = $self->{token} if $self->{token};
+    my $token = $self->get_token();
+    $payload->{token} = $token if $token;
 
     my $response = $self->{ua}->put(
         $url,
@@ -141,6 +162,54 @@ sub update_bug {
 
     if ( !$response->is_success ) {
         GitBz::Exception::Bugzilla->throw( "Failed to update bug: " . $response->status_line );
+    }
+
+    return decode_json( $response->content );
+}
+
+sub get_field_values {
+    my ( $self, $field_name ) = @_;
+
+    my $url = sprintf( "%s/field/bug", $self->{base_url} );
+    my $response = $self->{ua}->get($url);
+
+    if ( !$response->is_success ) {
+        return [];
+    }
+
+    my $data = decode_json( $response->content );
+    
+    # Find the field in the fields array
+    for my $field ( @{ $data->{fields} || [] } ) {
+        if ( $field->{name} eq $field_name && $field->{values} ) {
+            return [ map { $_->{name} } @{ $field->{values} } ];
+        }
+    }
+    
+    return [];
+}
+
+sub obsolete_attachment {
+    my ( $self, $attachment_id ) = @_;
+
+    my $url = sprintf( "%s/bug/attachment/%s", $self->{base_url}, $attachment_id );
+
+    my $payload = {
+        ids => [$attachment_id],
+        is_obsolete => JSON::true,
+    };
+
+    my $token = $self->get_token();
+    $payload->{token} = $token if $token;
+
+    my $response = $self->{ua}->put(
+        $url,
+        Content_Type => 'application/json',
+        Content      => encode_json($payload)
+    );
+
+    if ( !$response->is_success ) {
+        GitBz::Exception::Bugzilla->throw( "Failed to obsolete attachment: " . $response->status_line );
     }
 
     return decode_json( $response->content );

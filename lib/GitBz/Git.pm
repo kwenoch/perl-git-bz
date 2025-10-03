@@ -63,12 +63,18 @@ sub format_patch {
 sub get_commits {
     my ( $class, $range ) = @_;
 
-    # Try as single commit first
-    my $rev = try { $class->run( 'rev-parse', $range, '--verify' ) } catch { undef };
+    # Try as single commit first - exactly like original git-bz
+    my $rev = try { 
+        $class->run( 'rev-parse', $range, '--verify' );
+    } catch { 
+        undef 
+    };
 
     if ($rev) {
-        return $class->rev_list( $rev, '--max-count=1' );
+        # Single commit - return just that one commit
+        return $class->rev_list( '--max-count=1', $rev );
     } else {
+        # Not a single commit, treat as range
         return $class->rev_list($range);
     }
 }
