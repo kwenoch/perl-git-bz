@@ -15,20 +15,55 @@ package GitBz::Commands::Edit;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::Commands::Edit - Edit Bugzilla bug details and add comments
+
+=head1 SYNOPSIS
+
+    git bz edit <bug-ref>
+    git bz edit <commit>
+    git bz edit <revision-range>
+    git bz edit --pushed HEAD~3..HEAD
+
+=head1 DESCRIPTION
+
+Provides interactive editing of Bugzilla bug fields and comments.
+Can operate on individual bugs or extract bug references from Git commits.
+
+=cut
+
 use Modern::Perl;
 
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use File::Temp;
+
 use GitBz::Git;
 use GitBz::Exception;
 use GitBz::StatusWorkflow;
 use GitBz::Bug;
 
+=head2 new
+
+    my $edit = GitBz::Commands::Edit->new($commands);
+
+Constructor.
+
+=cut
+
 sub new {
     my ( $class, $commands ) = @_;
     bless { commands => $commands }, $class;
 }
+
+=head2 execute
+
+    $edit->execute(@args);
+
+Main entry point for the edit command.
+
+=cut
 
 sub execute {
     my ( $self, @args ) = @_;
@@ -71,6 +106,14 @@ sub execute {
     };
 }
 
+=head2 edit_bug
+
+    my $changed = $edit->edit_bug($bug_ref, \%opts);
+
+Edits a single bug through interactive template.
+
+=cut
+
 sub edit_bug {
     my ( $self, $bug_ref, $opts ) = @_;
 
@@ -82,6 +125,14 @@ sub edit_bug {
 
     return $self->update_bug( $client, $bug_ref, $edited, $opts );
 }
+
+=head2 edit_commits
+
+    my $changed = $edit->edit_commits(\@commits, \%opts);
+
+Extracts bug references from commits and edits associated bugs.
+
+=cut
 
 sub edit_commits {
     my ( $self, $commits, $opts ) = @_;
@@ -108,6 +159,14 @@ sub edit_commits {
     return $any_changed;
 }
 
+=head2 edit_bug_with_commits
+
+    my $changed = $edit->edit_bug_with_commits($bug_ref, \@commits, \%opts);
+
+Edits a bug with commit context information.
+
+=cut
+
 sub edit_bug_with_commits {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
@@ -119,6 +178,14 @@ sub edit_bug_with_commits {
 
     return $self->update_bug( $client, $bug_ref, $edited, $opts );
 }
+
+=head2 create_bug_template
+
+    my $template = $edit->create_bug_template($bug, \%opts);
+
+Generates an editor template with current bug state and available options.
+
+=cut
 
 sub create_bug_template {
     my ( $self, $bug, $opts ) = @_;
@@ -178,6 +245,14 @@ sub create_bug_template {
     return $template;
 }
 
+=head2 create_bug_template_with_commits
+
+    my $template = $edit->create_bug_template_with_commits($bug, \@commits, \%opts);
+
+Generates an editor template including commit information.
+
+=cut
+
 sub create_bug_template_with_commits {
     my ( $self, $bug, $commits, $opts ) = @_;
 
@@ -198,6 +273,14 @@ sub create_bug_template_with_commits {
     return $template;
 }
 
+=head2 edit_template
+
+    my $edited_content = $edit->edit_template($template);
+
+Opens an editor for the user to modify the template.
+
+=cut
+
 sub edit_template {
     my ( $self, $template ) = @_;
 
@@ -215,6 +298,14 @@ sub edit_template {
 
     return $content;
 }
+
+=head2 update_bug
+
+    my $changed = $edit->update_bug($client, $bug_ref, $edited_content, \%opts);
+
+Parses edited content and updates bug fields through the API.
+
+=cut
 
 sub update_bug {
     my ( $self, $client, $bug_ref, $edited, $opts ) = @_;
@@ -339,6 +430,14 @@ sub update_bug {
 
     return $changed;
 }
+
+=head2 extract_bug_ref
+
+    my $bug_ref = $edit->extract_bug_ref($commit);
+
+Extracts bug reference from commit message.
+
+=cut
 
 sub extract_bug_ref {
     my ( $self, $commit ) = @_;

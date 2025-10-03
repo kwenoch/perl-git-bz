@@ -15,12 +15,48 @@ package GitBz::StatusWorkflow;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::StatusWorkflow - Koha Bugzilla status workflow management
+
+=head1 SYNOPSIS
+
+    use GitBz::StatusWorkflow;
+    
+    my $workflow = GitBz::StatusWorkflow->new($client);
+    my $next_statuses = $workflow->get_next_status_values('NEW');
+    my $all_statuses = $workflow->get_all_status_values();
+
+=head1 DESCRIPTION
+
+Manages Koha-specific Bugzilla status workflow transitions.
+Provides valid next status options based on current bug status.
+
+=cut
+
 use Modern::Perl;
+
+=head2 new
+
+    my $workflow = GitBz::StatusWorkflow->new($client);
+
+Creates a new workflow manager with a REST client.
+
+=cut
 
 sub new {
     my ( $class, $client ) = @_;
     bless { client => $client }, $class;
 }
+
+=head2 get_next_status_values
+
+    my $statuses = $workflow->get_next_status_values($current_status);
+
+Returns arrayref of valid next status values for the current status.
+Based on Koha Bugzilla workflow rules.
+
+=cut
 
 sub get_next_status_values {
     my ( $self, $current_status ) = @_;
@@ -41,6 +77,14 @@ sub get_next_status_values {
     
     return $transitions{$current_status} || [];
 }
+
+=head2 get_all_status_values
+
+    my $statuses = $workflow->get_all_status_values();
+
+Returns arrayref of all possible bug status values from Bugzilla.
+
+=cut
 
 sub get_all_status_values {
     my ( $self ) = @_;

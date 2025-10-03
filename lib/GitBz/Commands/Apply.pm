@@ -15,6 +15,24 @@ package GitBz::Commands::Apply;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::Commands::Apply - Apply patches from Bugzilla bugs
+
+=head1 SYNOPSIS
+
+    git bz apply [options] <bug-ref>
+    git bz apply --continue
+    git bz apply --skip
+    git bz apply --abort
+
+=head1 DESCRIPTION
+
+Applies patch attachments from a Bugzilla bug to the current Git branch.
+Provides interactive patch selection and handles git-am workflow states.
+
+=cut
+
 use Modern::Perl;
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
@@ -23,10 +41,26 @@ use GitBz::Exception;
 use File::Temp;
 use MIME::Base64;
 
+=head2 new
+
+    my $apply = GitBz::Commands::Apply->new($commands);
+
+Constructor.
+
+=cut
+
 sub new {
     my ( $class, $commands ) = @_;
     bless { commands => $commands }, $class;
 }
+
+=head2 execute
+
+    $apply->execute(@args);
+
+Main entry point for the apply command.
+
+=cut
 
 sub execute {
     my ( $self, @args ) = @_;
@@ -59,6 +93,14 @@ sub execute {
     };
 }
 
+=head2 handle_git_am_state
+
+    $apply->handle_git_am_state(\%opts);
+
+Handles git-am workflow states (continue, skip, abort).
+
+=cut
+
 sub handle_git_am_state {
     my ( $self, $opts ) = @_;
 
@@ -70,6 +112,14 @@ sub handle_git_am_state {
         GitBz::Git->run( 'am', '--abort' );
     }
 }
+
+=head2 apply_bug_patches
+
+    $apply->apply_bug_patches($bug_ref, \%opts);
+
+Retrieves and applies patches from a bug.
+
+=cut
 
 sub apply_bug_patches {
     my ( $self, $bug_ref, $opts ) = @_;
@@ -119,6 +169,14 @@ sub apply_bug_patches {
     $self->apply_patches( \@selected_patches, $opts );
 }
 
+=head2 prompt_multi
+
+    my $choice = $apply->prompt_multi($prompt, \@choices);
+
+Prompts user for input with multiple choice options.
+
+=cut
+
 sub prompt_multi {
     my ( $self, $prompt, $choices ) = @_;
 
@@ -135,6 +193,14 @@ sub prompt_multi {
         print "Please enter one of: " . join( ", ", @$choices ) . "\n";
     }
 }
+
+=head2 select_patches_interactively
+
+    my @selected = $apply->select_patches_interactively(\@patches, $bug);
+
+Provides interactive patch selection through an editor.
+
+=cut
 
 sub select_patches_interactively {
     my ( $self, $patches, $bug ) = @_;
@@ -186,6 +252,14 @@ sub select_patches_interactively {
 
     return @selected;
 }
+
+=head2 apply_patches
+
+    $apply->apply_patches(\@attachments, \%opts);
+
+Applies selected patches using git-am.
+
+=cut
 
 sub apply_patches {
     my ( $self, $attachments, $opts ) = @_;

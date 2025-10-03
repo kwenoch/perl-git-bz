@@ -15,6 +15,61 @@
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+git-bz - Git integration with Bugzilla for Koha development
+
+=head1 SYNOPSIS
+
+    git bz apply [options] <bug-ref>
+    git bz attach [options] [<bug-ref>] <commit-range>
+    git bz edit [options] (<bug-ref> | <commit> | <revision-range>)
+
+=head1 DESCRIPTION
+
+A Perl rewrite of git-bz for Koha development workflow using Bugzilla's REST API.
+Provides seamless integration between Git and Bugzilla for patch management.
+
+=head1 COMMANDS
+
+=over 4
+
+=item B<apply>
+
+Apply patches from a Bugzilla bug to the current Git branch.
+
+=item B<attach>
+
+Attach Git commits as patches to a Bugzilla bug.
+
+=item B<edit>
+
+Edit bug details and add comments through an interactive editor.
+
+=back
+
+=head1 CONFIGURATION
+
+    # Set default Bugzilla tracker
+    git config bz.default-tracker bugs.koha-community.org
+
+    # Set credentials via environment
+    export BUGZILLA_USER=your-email@example.com
+    export BUGZILLA_PASSWORD=your-password
+
+=head1 AUTHOR
+
+Koha Development Team
+
+=head1 LICENSE
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
+
+=cut
+
 use Modern::Perl;
 
 use FindBin;

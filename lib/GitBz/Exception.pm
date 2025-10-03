@@ -15,6 +15,24 @@ package GitBz::Exception;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::Exception - Exception hierarchy for git-bz
+
+=head1 SYNOPSIS
+
+    use GitBz::Exception;
+    
+    GitBz::Exception::Git->throw("Git command failed");
+    GitBz::Exception::Bugzilla->throw("API error");
+
+=head1 DESCRIPTION
+
+Defines a structured exception hierarchy for git-bz error handling.
+Provides specific exception types for different error categories.
+
+=cut
+
 use Modern::Perl;
 use Exception::Class (
     'GitBz::Exception' => {

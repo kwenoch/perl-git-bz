@@ -15,6 +15,23 @@ package GitBz::Commands;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::Commands - Command dispatcher for git-bz
+
+=head1 SYNOPSIS
+
+    use GitBz::Commands;
+    
+    GitBz::Commands->dispatch(@ARGV);
+
+=head1 DESCRIPTION
+
+Handles command-line argument parsing and dispatches to appropriate command handlers.
+Manages configuration loading and Bugzilla client initialization.
+
+=cut
+
 use Modern::Perl;
 
 use Try::Tiny qw(catch try);
@@ -28,6 +45,14 @@ my %COMMANDS = (
     attach => 'GitBz::Commands::Attach',
     edit   => 'GitBz::Commands::Edit',
 );
+
+=head2 new
+
+    my $commands = GitBz::Commands->new(%opts);
+
+Creates a new command dispatcher with configuration and REST client.
+
+=cut
 
 sub new {
     my ( $class, %opts ) = @_;
@@ -65,6 +90,14 @@ sub new {
         tracker => $tracker,
     }, $class;
 }
+
+=head2 dispatch
+
+    GitBz::Commands->dispatch(@args);
+
+Parses command-line arguments and executes the appropriate command.
+
+=cut
 
 sub dispatch {
     my ( $class, @args ) = @_;

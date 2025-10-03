@@ -15,6 +15,24 @@ package GitBz::Config;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::Config - Configuration management for git-bz
+
+=head1 SYNOPSIS
+
+    use GitBz::Config;
+    
+    my $config = GitBz::Config->load();
+    my $tracker = $config->{git_config}->{'default-tracker'};
+
+=head1 DESCRIPTION
+
+Handles loading and merging configuration from Git config and default settings.
+Provides Koha-specific defaults for Bugzilla integration.
+
+=cut
+
 use Modern::Perl;
 
 use Config::Tiny;
@@ -36,6 +54,15 @@ my $GIT_CONFIG = {
     'add-url'         => 'true',
     'browser'         => 'firefox',
 };
+
+=head2 load
+
+    my $config = GitBz::Config->load();
+
+Loads configuration from Git config and merges with defaults.
+Returns a hashref with 'config' and 'git_config' keys.
+
+=cut
 
 sub load {
     my ($class) = @_;

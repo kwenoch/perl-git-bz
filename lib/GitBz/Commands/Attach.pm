@@ -15,6 +15,23 @@ package GitBz::Commands::Attach;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::Commands::Attach - Attach Git commits as patches to Bugzilla bugs
+
+=head1 SYNOPSIS
+
+    git bz attach [options] [<bug-ref>] <commit-range>
+    git bz attach --edit 12345 HEAD~2..HEAD
+    git bz attach HEAD  # Extracts bug ref from commit message
+
+=head1 DESCRIPTION
+
+Attaches Git commits as patch files to Bugzilla bugs.
+Supports interactive editing of bug fields and attachment metadata.
+
+=cut
+
 use Modern::Perl;
 
 use Getopt::Long qw(GetOptionsFromArray);
@@ -26,6 +43,14 @@ use GitBz::Exception;
 use GitBz::StatusWorkflow;
 use GitBz::Bug;
 
+=head2 new
+
+    my $attach = GitBz::Commands::Attach->new($commands);
+
+Constructor.
+
+=cut
+
 sub new {
     my ( $class, $commands ) = @_;
     bless {
@@ -33,6 +58,14 @@ sub new {
         client   => $commands->{client}
     }, $class;
 }
+
+=head2 execute
+
+    $attach->execute(@args);
+
+Main entry point for the attach command.
+
+=cut
 
 sub execute {
     my ( $self, @args ) = @_;
@@ -58,6 +91,14 @@ sub execute {
     };
 }
 
+=head2 parse_args
+
+    my ($bug_ref, $commit_range) = $attach->parse_args(@args);
+
+Parses command line arguments to extract bug reference and commit range.
+
+=cut
+
 sub parse_args {
     my ( $self, @args ) = @_;
 
@@ -76,6 +117,14 @@ sub parse_args {
     }
 }
 
+=head2 extract_bug_ref
+
+    my $bug_ref = $attach->extract_bug_ref($commit);
+
+Extracts bug reference from commit message.
+
+=cut
+
 sub extract_bug_ref {
     my ( $self, $commit ) = @_;
 
@@ -88,6 +137,14 @@ sub extract_bug_ref {
 
     return;
 }
+
+=head2 attach_patches
+
+    $attach->attach_patches($bug_ref, \@commits, \%opts);
+
+Attaches commit patches to the specified bug.
+
+=cut
 
 sub attach_patches {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
@@ -115,12 +172,20 @@ sub attach_patches {
             push @obsoletes_list, @obsoletes;
         }
 
-        $bug->add_attachment(
-            $patch,
-            $filename,
-            $description,
-            comment => $comment,
-        );
+        eval {
+            $bug->add_attachment(
+                $patch,
+                $filename,
+                $description,
+                comment => $comment,
+            );
+        };
+        
+        if ($@) {
+            print "✗ Failed to attach: $description\n";
+            print "Error: $@\n";
+            return; # Skip remaining steps
+        }
 
         # Store attachment info for later display
         push @{ $self->{_attached} }, $description;
@@ -180,6 +245,15 @@ sub attach_patches {
 
     # Obsoletes are now handled in the unified update section above
 }
+
+=head2 edit_attachment_comment
+
+    my ($desc, $comment, $obsoletes, $updates) = 
+        $attach->edit_attachment_comment($bug, $commit);
+
+Provides interactive editing of attachment details and bug fields.
+
+=cut
 
 sub edit_attachment_comment {
     my ( $self, $bug, $commit ) = @_;
@@ -248,6 +322,14 @@ sub edit_attachment_comment {
     return $self->parse_edited_content( $edited, $bug );
 }
 
+=head2 edit_template
+
+    my $edited_content = $attach->edit_template($template);
+
+Opens an editor for the user to modify the template.
+
+=cut
+
 sub edit_template {
     my ( $self, $template ) = @_;
 
@@ -265,6 +347,15 @@ sub edit_template {
 
     return $content;
 }
+
+=head2 parse_edited_content
+
+    my ($desc, $comment, $obsoletes, $updates) = 
+        $attach->parse_edited_content($edited_content, $bug);
+
+Parses the edited template content and extracts changes.
+
+=cut
 
 sub parse_edited_content {
     my ( $self, $content, $bug ) = @_;

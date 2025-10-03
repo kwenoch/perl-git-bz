@@ -15,11 +15,44 @@ package GitBz::RestClient;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
+=head1 NAME
+
+GitBz::RestClient - Bugzilla REST API client
+
+=head1 SYNOPSIS
+
+    use GitBz::RestClient;
+    
+    my $client = GitBz::RestClient->new(
+        host     => 'bugs.koha-community.org',
+        https    => 1,
+        username => $username,
+        password => $password,
+    );
+    
+    $client->login();
+    my $bug = $client->get_bug(12345);
+
+=head1 DESCRIPTION
+
+Provides a REST API client for interacting with Bugzilla instances.
+Handles authentication, bug retrieval, attachment management, and bug updates.
+
+=cut
+
 use Modern::Perl;
 use LWP::UserAgent;
 use JSON;
 use MIME::Base64;
 use GitBz::Exception;
+
+=head2 new
+
+    my $client = GitBz::RestClient->new(%args);
+
+Creates a new REST client instance.
+
+=cut
 
 sub new {
     my ( $class, %args ) = @_;
@@ -45,6 +78,14 @@ sub new {
     }, $class;
 }
 
+=head2 login
+
+    $client->login($username, $password);
+
+Authenticates with Bugzilla and stores the session token.
+
+=cut
+
 sub login {
     my ( $self, $username, $password ) = @_;
 
@@ -68,6 +109,14 @@ sub login {
     GitBz::Exception::Bugzilla->throw( "Login failed: " . $response->status_line );
 }
 
+=head2 get_token
+
+    my $token = $client->get_token();
+
+Returns authentication token, logging in if necessary.
+
+=cut
+
 sub get_token {
     my ($self) = @_;
 
@@ -80,6 +129,14 @@ sub get_token {
 
     return undef;
 }
+
+=head2 get_bug
+
+    my $bug = $client->get_bug($bug_id);
+
+Retrieves bug data from Bugzilla.
+
+=cut
 
 sub get_bug {
     my ( $self, $bug_id ) = @_;
@@ -95,6 +152,14 @@ sub get_bug {
     return $data->{bugs}->[0];
 }
 
+=head2 get_attachments
+
+    my $attachments = $client->get_attachments($bug_id);
+
+Retrieves all attachments for a bug.
+
+=cut
+
 sub get_attachments {
     my ( $self, $bug_id ) = @_;
 
@@ -108,6 +173,14 @@ sub get_attachments {
     my $data = decode_json( $response->content );
     return $data->{bugs}->{$bug_id} || [];
 }
+
+=head2 add_attachment
+
+    $client->add_attachment($bug_id, $data, $filename, $summary, %opts);
+
+Adds a new attachment to a bug.
+
+=cut
 
 sub add_attachment {
     my ( $self, $bug_id, $data, $filename, $summary, %opts ) = @_;
@@ -125,6 +198,7 @@ sub add_attachment {
 
     $payload->{comment} = $opts{comment} if $opts{comment};
     my $token = $self->get_token();
+    warn "DEBUG: Token for add_attachment: " . ($token || 'NONE') . "\n" if $ENV{DEBUG};
     $payload->{token} = $token if $token;
 
     my $response = $self->{ua}->post(
@@ -139,6 +213,14 @@ sub add_attachment {
 
     return decode_json( $response->content );
 }
+
+=head2 update_bug
+
+    $client->update_bug($bug_id, %params);
+
+Updates bug fields and adds comments.
+
+=cut
 
 sub update_bug {
     my ( $self, $bug_id, %params ) = @_;
@@ -166,6 +248,14 @@ sub update_bug {
     return decode_json( $response->content );
 }
 
+=head2 get_field_values
+
+    my $values = $client->get_field_values($field_name);
+
+Retrieves possible values for a bug field.
+
+=cut
+
 sub get_field_values {
     my ( $self, $field_name ) = @_;
 
@@ -187,6 +277,14 @@ sub get_field_values {
 
     return [];
 }
+
+=head2 obsolete_attachment
+
+    $client->obsolete_attachment($attachment_id);
+
+Marks an attachment as obsolete.
+
+=cut
 
 sub obsolete_attachment {
     my ( $self, $attachment_id ) = @_;
