@@ -16,6 +16,8 @@ package GitBz::Git;
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
+
+use Encode qw(decode);
 use IPC::Run3;
 use Try::Tiny qw(catch try);
 use GitBz::Exception;
@@ -31,7 +33,10 @@ sub run {
         if ( $? != 0 ) {
             GitBz::Exception::Git->throw("Git command failed: $stderr");
         }
-        chomp $stdout if $stdout;
+        if ($stdout) {
+            $stdout = decode( 'UTF-8', $stdout, Encode::FB_CROAK | Encode::LEAVE_SRC );
+            chomp $stdout;
+        }
         return $stdout || '';
     } catch {
         GitBz::Exception::Git->throw($_);

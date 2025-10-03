@@ -17,14 +17,13 @@ package GitBz::Commands::Edit;
 
 use Modern::Perl;
 
-use utf8;
-
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use File::Temp;
 use GitBz::Git;
 use GitBz::Exception;
 use GitBz::StatusWorkflow;
+use GitBz::Bug;
 
 sub new {
     my ( $class, $commands ) = @_;
@@ -76,8 +75,7 @@ sub edit_bug {
     my ( $self, $bug_ref, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = $client->get_bug($bug_ref);
-    GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
+    my $bug    = GitBz::Bug->get( $client, $bug_ref );
 
     my $template = $self->create_bug_template( $bug, $opts );
     my $edited   = $self->edit_template($template);
@@ -106,7 +104,7 @@ sub edit_commits {
         my $changed = $self->edit_bug_with_commits( $bug_ref, $bugs{$bug_ref}, $opts );
         $any_changed ||= $changed;
     }
-    
+
     return $any_changed;
 }
 
@@ -114,8 +112,7 @@ sub edit_bug_with_commits {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = $client->get_bug($bug_ref);
-    GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
+    my $bug    = GitBz::Bug->get( $client, $bug_ref );
 
     my $template = $self->create_bug_template_with_commits( $bug, $commits, $opts );
     my $edited   = $self->edit_template($template);
@@ -128,29 +125,29 @@ sub create_bug_template {
     my $client = $self->{commands}->{client};
 
     my $template = "";
-    $template .= "# Bug $bug->{id} - $bug->{summary}\n\n";
-    
+    $template .= "# Bug " . $bug->id . " - " . $bug->summary . "\n\n";
+
     # Show existing patches for obsoleting
-    my $attachments = $client->get_attachments($bug->{id});
+    my $attachments = $bug->attachments;
     if ( $attachments && @$attachments ) {
-        for my $patch ( @$attachments ) {
+        for my $patch (@$attachments) {
             next unless $patch->{is_patch} && !$patch->{is_obsolete};
             $template .= "#Obsoletes: $patch->{id} - $patch->{summary}\n";
         }
         $template .= "\n";
     }
-    
+
     # Add status options
     my $workflow = GitBz::StatusWorkflow->new($client);
-    $template .= "# Current status: $bug->{status}\n";
-    my $status_values = $workflow->get_next_status_values($bug->{status});
+    $template .= "# Current status: " . $bug->status . "\n";
+    my $status_values = $workflow->get_next_status_values( $bug->status );
     for my $status (@$status_values) {
         $template .= "# Status: $status\n";
     }
     $template .= "\n";
-    
+
     # Add patch complexity options
-    my $complexity = $bug->{cf_patch_complexity} || "";
+    my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
     my $complexity_values = $client->get_field_values('cf_patch_complexity');
     if ($complexity_values) {
@@ -159,15 +156,22 @@ sub create_bug_template {
         }
     }
     $template .= "\n";
-    
+
     # Add depends options
-    my $depends = $bug->{depends_on} || [];
-    my $depends_str = ref($depends) eq 'ARRAY' ? join(' ', @$depends) : $depends;
+    my $depends_list = $bug->depends_on;
+    my $depends_str  = @$depends_list ? join( ' ', @$depends_list ) : '';
     $template .= "# Current depends: $depends_str\n";
+
+    # Show current depends uncommented
+    for my $dep (@$depends_list) {
+        $template .= "Depends: bug $dep\n";
+    }
+
+    # Show skeleton commented
     $template .= "# Depends: bug xxxx\n";
     $template .= "# Depends: bug yyyy\n";
     $template .= "\n";
-    
+
     $template .= "# Enter comment below. Lines starting with '#' will be ignored.\n";
     $template .= "# To obsolete patches, uncomment the appropriate Obsoletes lines.\n";
 
@@ -217,14 +221,14 @@ sub update_bug {
 
     my @lines = split /\n/, $edited;
     my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;
-    
+
     # Early return if no non-comment lines - no API calls needed
     return 0 unless @non_comment_lines;
-    
+
     my @obsoletes;
     my @comment_lines;
     my %update_params;
-    
+
     for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Status\s*:\s*(.+)/ ) {
             $update_params{status} = $1;
@@ -240,71 +244,99 @@ sub update_bug {
             push @comment_lines, $line;
         }
     }
-    
+
     my $comment = join( "\n", @comment_lines );
     $comment =~ s/^\s+|\s+$//g;
-    
+
     # Early return if no changes
     return 0 unless %update_params || $comment || @obsoletes;
-    
+
     # Only fetch bug data if we have changes to process
-    my $bug = $client->get_bug($bug_ref);
+    my $bug     = GitBz::Bug->get( $client, $bug_ref );
     my $changed = 0;
-    
+
     # Check if there are actual changes before making API call
     my %actual_changes;
-    if ($update_params{status} && $update_params{status} ne $bug->{status}) {
+    if ( $update_params{status} && $update_params{status} ne $bug->status ) {
         $actual_changes{status} = $update_params{status};
     }
-    if ($update_params{resolution} && $update_params{resolution} ne ($bug->{resolution} || '')) {
+    if ( $update_params{resolution} && $update_params{resolution} ne ( $bug->resolution || '' ) ) {
         $actual_changes{resolution} = $update_params{resolution};
     }
-    if ($update_params{cf_patch_complexity} && $update_params{cf_patch_complexity} ne ($bug->{cf_patch_complexity} || '')) {
+    if (   $update_params{cf_patch_complexity}
+        && $update_params{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
+    {
         $actual_changes{cf_patch_complexity} = $update_params{cf_patch_complexity};
     }
-    if ($update_params{depends_on}) {
-        $actual_changes{depends_on} = $update_params{depends_on};
+    if ( $update_params{depends_on} ) {
+        my @new_depends = @{ $update_params{depends_on} };
+        my @old_depends = @{ $bug->depends_on };
+
+        my @to_add = grep {
+            my $new = $_;
+            !grep { $_ eq $new } @old_depends
+        } @new_depends;
+        my @to_remove = grep {
+            my $old = $_;
+            !grep { $_ eq $old } @new_depends
+        } @old_depends;
+
+        if ( @to_add || @to_remove ) {
+            my %depends_update;
+            $depends_update{add}        = \@to_add    if @to_add;
+            $depends_update{remove}     = \@to_remove if @to_remove;
+            $actual_changes{depends_on} = \%depends_update;
+        }
     }
     if ($comment) {
         $actual_changes{comment} = { body => $comment };
     }
-    
+
     if (%actual_changes) {
-        print "Updating bug $bug_ref\n";
-        
+        print "Updating bug $bug_ref:\n";
+
         # Show field changes
-        if ($actual_changes{status}) {
-            print "Status changed: $bug->{status} → $actual_changes{status}\n";
+        if ( $actual_changes{status} ) {
+            print "  ✓ Status: " . $bug->status . " → $actual_changes{status}\n";
         }
-        if ($actual_changes{resolution}) {
-            my $old = $bug->{resolution} || 'none';
-            print "Resolution changed: $old → $actual_changes{resolution}\n";
+        if ( $actual_changes{resolution} ) {
+            my $old = $bug->resolution || 'none';
+            print "  ✓ Resolution: $old → $actual_changes{resolution}\n";
         }
-        if ($actual_changes{cf_patch_complexity}) {
-            my $old = $bug->{cf_patch_complexity} || 'none';
-            print "Patch-complexity changed: $old → $actual_changes{cf_patch_complexity}\n";
+        if ( $actual_changes{cf_patch_complexity} ) {
+            my $old = $bug->cf_patch_complexity || 'none';
+            print "  ✓ Patch-complexity: $old → $actual_changes{cf_patch_complexity}\n";
         }
-        if ($actual_changes{comment}) {
-            print "Added comment\n";
+        if ( $actual_changes{comment} ) {
+            print "  ✓ Added comment\n";
         }
-        
-        $client->update_bug( $bug_ref, %actual_changes );
+        if ( $actual_changes{depends_on} ) {
+            my $depends_change = $actual_changes{depends_on};
+            if ( $depends_change->{add} ) {
+                print "  ✓ Depends: added " . join( ' ', @{ $depends_change->{add} } ) . "\n";
+            }
+            if ( $depends_change->{remove} ) {
+                print "  ✓ Depends: removed " . join( ' ', @{ $depends_change->{remove} } ) . "\n";
+            }
+        }
+
+        $bug->update(%actual_changes);
         $changed = 1;
     }
-    
+
     # Handle obsoleting attachments
     if (@obsoletes) {
-        my $attachments = $client->get_attachments($bug_ref);
+        my $attachments   = $bug->attachments;
         my %attach_lookup = map { $_->{id} => $_->{summary} } @$attachments;
-        
+
         for my $attach_id (@obsoletes) {
-            $client->obsolete_attachment($attach_id);
+            $bug->obsolete_attachment($attach_id);
             my $summary = $attach_lookup{$attach_id} || "Unknown";
-            print "Obsoleted attachment $attach_id - $summary\n";
+            print "  ✓ Obsoleted attachment $attach_id - $summary\n";
             $changed = 1;
         }
     }
-    
+
     return $changed;
 }
 

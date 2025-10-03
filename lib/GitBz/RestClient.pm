@@ -16,7 +16,6 @@ package GitBz::RestClient;
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
-
 use LWP::UserAgent;
 use JSON;
 use MIME::Base64;
@@ -71,14 +70,14 @@ sub login {
 
 sub get_token {
     my ($self) = @_;
-    
+
     return $self->{token} if $self->{token};
-    
-    if ($self->{username} && $self->{password}) {
+
+    if ( $self->{username} && $self->{password} ) {
         $self->login();
         return $self->{token};
     }
-    
+
     return undef;
 }
 
@@ -170,7 +169,7 @@ sub update_bug {
 sub get_field_values {
     my ( $self, $field_name ) = @_;
 
-    my $url = sprintf( "%s/field/bug", $self->{base_url} );
+    my $url      = sprintf( "%s/field/bug", $self->{base_url} );
     my $response = $self->{ua}->get($url);
 
     if ( !$response->is_success ) {
@@ -178,14 +177,14 @@ sub get_field_values {
     }
 
     my $data = decode_json( $response->content );
-    
+
     # Find the field in the fields array
     for my $field ( @{ $data->{fields} || [] } ) {
         if ( $field->{name} eq $field_name && $field->{values} ) {
             return [ map { $_->{name} } @{ $field->{values} } ];
         }
     }
-    
+
     return [];
 }
 
@@ -195,7 +194,7 @@ sub obsolete_attachment {
     my $url = sprintf( "%s/bug/attachment/%s", $self->{base_url}, $attachment_id );
 
     my $payload = {
-        ids => [$attachment_id],
+        ids         => [$attachment_id],
         is_obsolete => JSON::true,
     };
 

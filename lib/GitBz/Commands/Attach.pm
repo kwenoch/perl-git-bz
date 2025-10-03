@@ -17,8 +17,6 @@ package GitBz::Commands::Attach;
 
 use Modern::Perl;
 
-use utf8;
-
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use File::Temp;
@@ -26,10 +24,14 @@ use File::Temp;
 use GitBz::Git;
 use GitBz::Exception;
 use GitBz::StatusWorkflow;
+use GitBz::Bug;
 
 sub new {
     my ( $class, $commands ) = @_;
-    bless { commands => $commands }, $class;
+    bless {
+        commands => $commands,
+        client   => $commands->{client}
+    }, $class;
 }
 
 sub execute {
@@ -50,7 +52,7 @@ sub execute {
 
         $self->attach_patches( $bug_ref, \@commits, \%opts );
 
-        print "Successfully attached " . scalar(@commits) . " patch(es) to bug $bug_ref\n";
+        print "\n✓ Successfully attached " . scalar(@commits) . " patch(es) to bug $bug_ref\n";
     } catch {
         GitBz::Exception->throw("Attach failed: $_");
     };
@@ -90,10 +92,13 @@ sub extract_bug_ref {
 sub attach_patches {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
-    my $client = $self->{commands}->{client};
-    my $bug    = $client->get_bug($bug_ref);
+    my $client = $self->{client};
+    my $bug    = GitBz::Bug->get( $client, $bug_ref );
 
     my $is_first = 1;
+    my %bug_updates;
+    my @obsoletes_list;
+
     for my $commit (@$commits) {
         my $patch       = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
         my $filename    = sprintf( "%s.patch", substr( $commit->{id}, 0, 7 ) );
@@ -103,29 +108,86 @@ sub attach_patches {
         my @obsoletes;
 
         if ( $opts->{edit} && $is_first ) {
-            ( $description, $comment, my $obsoletes_ref ) = $self->edit_attachment_comment( $bug, $commit );
-            @obsoletes = @$obsoletes_ref if $obsoletes_ref;
+            ( $description, $comment, my $obsoletes_ref, my $updates_ref ) =
+                $self->edit_attachment_comment( $bug, $commit );
+            @obsoletes   = @$obsoletes_ref if $obsoletes_ref;
+            %bug_updates = %$updates_ref   if $updates_ref;
+            push @obsoletes_list, @obsoletes;
         }
 
-        $client->add_attachment(
-            $bug_ref,
+        $bug->add_attachment(
             $patch,
             $filename,
             $description,
-            comment   => $comment,
-            obsoletes => \@obsoletes
+            comment => $comment,
         );
 
-        print "Attached: $description\n";
+        # Store attachment info for later display
+        push @{ $self->{_attached} }, $description;
         $is_first = 0;
     }
+
+    # Show all updates together
+    if ( %bug_updates || @obsoletes_list || $self->{_attached} ) {
+        print "\nUpdating bug $bug_ref:\n";
+
+        # Show attachments
+        for my $desc ( @{ $self->{_attached} || [] } ) {
+            print "  ✓ Attached: $desc\n";
+        }
+
+        # Show bug field updates
+        if ( $bug_updates{status} && $bug_updates{status} ne $bug->status ) {
+            print "  ✓ Status: " . $bug->status . " → $bug_updates{status}\n";
+        }
+        if (   $bug_updates{cf_patch_complexity}
+            && $bug_updates{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
+        {
+            my $old = $bug->cf_patch_complexity || 'none';
+            print "  ✓ Patch-complexity: $old → $bug_updates{cf_patch_complexity}\n";
+        }
+        if ( $bug_updates{comment} ) {
+            print "  ✓ Added comment\n";
+        }
+        if ( $bug_updates{depends_on} ) {
+            my $depends_change = $bug_updates{depends_on};
+            if ( $depends_change->{add} ) {
+                print "  ✓ Depends: added " . join( ' ', @{ $depends_change->{add} } ) . "\n";
+            }
+            if ( $depends_change->{remove} ) {
+                print "  ✓ Depends: removed " . join( ' ', @{ $depends_change->{remove} } ) . "\n";
+            }
+        }
+
+        # Show obsoleted attachments
+        for my $attach_id (@obsoletes_list) {
+            my $attachments   = $bug->attachments;
+            my %attach_lookup = map { $_->{id} => $_->{summary} } @$attachments;
+            my $summary       = $attach_lookup{$attach_id} || "Unknown";
+            print "  ✓ Obsoleted attachment $attach_id - $summary\n";
+        }
+
+        # Perform updates
+        if (%bug_updates) {
+            $bug->update(%bug_updates);
+        }
+
+        # Perform obsoletes
+        for my $attach_id (@obsoletes_list) {
+            $bug->obsolete_attachment($attach_id);
+        }
+    }
+
+    # Obsoletes are now handled in the unified update section above
 }
 
 sub edit_attachment_comment {
     my ( $self, $bug, $commit ) = @_;
 
+    my $client = $self->{client};
+
     my $template = "";
-    $template .= "# Attachment to Bug $bug->{id} - $bug->{summary}\n\n";
+    $template .= "# Attachment to Bug " . $bug->id . " - " . $bug->summary . "\n\n";
     $template .= $commit->{subject} . "\n\n";
 
     # Add commit body as initial comment
@@ -133,9 +195,10 @@ sub edit_attachment_comment {
     $template .= $body . "\n\n" if $body;
 
     # Show existing patches for obsoleting
-    if ( $bug->{attachments} && @{ $bug->{attachments} } ) {
-        for my $patch ( @{ $bug->{attachments} } ) {
-            next unless $patch->{is_patch};
+    my $attachments = $bug->attachments;
+    if ( $attachments && @$attachments ) {
+        for my $patch (@$attachments) {
+            next unless $patch->{is_patch} && !$patch->{is_obsolete};
             my $obsoleted = ( $commit->{subject} eq $patch->{summary} ) ? "" : "#";
             $template .= "${obsoleted}Obsoletes: $patch->{id} - $patch->{summary}\n";
         }
@@ -143,17 +206,16 @@ sub edit_attachment_comment {
     }
 
     # Add status options
-    my $client   = $self->{commands}->{client};
     my $workflow = GitBz::StatusWorkflow->new($client);
-    $template .= "# Current status: $bug->{status}\n";
-    my $status_values = $workflow->get_next_status_values( $bug->{status} );
+    $template .= "# Current status: " . $bug->status . "\n";
+    my $status_values = $workflow->get_next_status_values( $bug->status );
     for my $status (@$status_values) {
         $template .= "# Status: $status\n";
     }
     $template .= "\n";
 
     # Add patch complexity options
-    my $complexity = $bug->{cf_patch_complexity} || "";
+    my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
     my $complexity_values = $client->get_field_values('cf_patch_complexity');
     if ($complexity_values) {
@@ -164,9 +226,16 @@ sub edit_attachment_comment {
     $template .= "\n";
 
     # Add depends options
-    my $depends     = $bug->{depends_on} || [];
-    my $depends_str = ref($depends) eq 'ARRAY' ? join( ' ', @$depends ) : $depends;
+    my $depends_list = $bug->depends_on;
+    my $depends_str  = @$depends_list ? join( ' ', @$depends_list ) : '';
     $template .= "# Current depends: $depends_str\n";
+
+    # Show current depends uncommented
+    for my $dep (@$depends_list) {
+        $template .= "Depends: bug $dep\n";
+    }
+
+    # Show skeleton commented
     $template .= "# Depends: bug xxxx\n";
     $template .= "# Depends: bug yyyy\n";
     $template .= "\n";
@@ -176,7 +245,7 @@ sub edit_attachment_comment {
     $template .= "# To obsolete existing patches, uncomment the appropriate lines.\n";
 
     my $edited = $self->edit_template($template);
-    return $self->parse_edited_content($edited);
+    return $self->parse_edited_content( $edited, $bug );
 }
 
 sub edit_template {
@@ -198,20 +267,27 @@ sub edit_template {
 }
 
 sub parse_edited_content {
-    my ( $self, $content ) = @_;
+    my ( $self, $content, $bug ) = @_;
 
     my @lines = split /\n/, $content;
-    my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;    # Also filter empty lines
+    my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;
 
     my $description = shift @non_comment_lines || "";
     $description =~ s/^\s+|\s+$//g;
 
     my @obsoletes;
     my @comment_lines;
+    my %bug_updates;
 
     for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
+        } elsif ( $line =~ /^\s*Status\s*:\s*(.+)/ ) {
+            $bug_updates{status} = $1;
+        } elsif ( $line =~ /^\s*Patch-complexity\s*:\s*(.+)/ ) {
+            $bug_updates{cf_patch_complexity} = $1;
+        } elsif ( $line =~ /^\s*Depends\s*:\s*([Bb][Uu][Gg])?\s*(\d+)/ ) {
+            push @{ $bug_updates{depends_on} }, $2;
         } else {
             push @comment_lines, $line;
         }
@@ -220,9 +296,37 @@ sub parse_edited_content {
     my $comment = join( "\n", @comment_lines );
     $comment =~ s/^\s+|\s+$//g;
 
+    if ($comment) {
+        $bug_updates{comment} = { body => $comment };
+    }
+
+    # Convert depends_on to proper API format with add/remove actions
+    if ( $bug_updates{depends_on} ) {
+        my @new_depends = @{ $bug_updates{depends_on} };
+        my @old_depends = @{ $bug->depends_on };
+
+        my @to_add = grep {
+            my $new = $_;
+            !grep { $_ eq $new } @old_depends
+        } @new_depends;
+        my @to_remove = grep {
+            my $old = $_;
+            !grep { $_ eq $old } @new_depends
+        } @old_depends;
+
+        if ( @to_add || @to_remove ) {
+            my %depends_update;
+            $depends_update{add}     = \@to_add    if @to_add;
+            $depends_update{remove}  = \@to_remove if @to_remove;
+            $bug_updates{depends_on} = \%depends_update;
+        } else {
+            delete $bug_updates{depends_on};
+        }
+    }
+
     GitBz::Exception->throw("Empty description, aborting\n") unless $description;
 
-    return ( $description, $comment, \@obsoletes );
+    return ( $description, $comment, \@obsoletes, \%bug_updates );
 }
 
 1;
