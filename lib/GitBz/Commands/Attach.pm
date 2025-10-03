@@ -22,6 +22,7 @@ use utf8;
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use File::Temp;
+
 use GitBz::Git;
 use GitBz::Exception;
 use GitBz::StatusWorkflow;
@@ -90,17 +91,17 @@ sub attach_patches {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug = $client->get_bug($bug_ref);
-    
+    my $bug    = $client->get_bug($bug_ref);
+
     my $is_first = 1;
     for my $commit (@$commits) {
-        my $patch    = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
-        my $filename = sprintf( "%s.patch", substr( $commit->{id}, 0, 7 ) );
+        my $patch       = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
+        my $filename    = sprintf( "%s.patch", substr( $commit->{id}, 0, 7 ) );
         my $description = $commit->{subject};
-        my $body = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
-        my $comment = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
+        my $body        = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
+        my $comment     = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
         my @obsoletes;
-        
+
         if ( $opts->{edit} && $is_first ) {
             ( $description, $comment, my $obsoletes_ref ) = $self->edit_attachment_comment( $bug, $commit );
             @obsoletes = @$obsoletes_ref if $obsoletes_ref;
@@ -111,7 +112,7 @@ sub attach_patches {
             $patch,
             $filename,
             $description,
-            comment => $comment,
+            comment   => $comment,
             obsoletes => \@obsoletes
         );
 
@@ -126,11 +127,11 @@ sub edit_attachment_comment {
     my $template = "";
     $template .= "# Attachment to Bug $bug->{id} - $bug->{summary}\n\n";
     $template .= $commit->{subject} . "\n\n";
-    
+
     # Add commit body as initial comment
     my $body = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
     $template .= $body . "\n\n" if $body;
-    
+
     # Show existing patches for obsoleting
     if ( $bug->{attachments} && @{ $bug->{attachments} } ) {
         for my $patch ( @{ $bug->{attachments} } ) {
@@ -140,17 +141,17 @@ sub edit_attachment_comment {
         }
         $template .= "\n";
     }
-    
+
     # Add status options
-    my $client = $self->{commands}->{client};
+    my $client   = $self->{commands}->{client};
     my $workflow = GitBz::StatusWorkflow->new($client);
     $template .= "# Current status: $bug->{status}\n";
-    my $status_values = $workflow->get_next_status_values($bug->{status});
+    my $status_values = $workflow->get_next_status_values( $bug->{status} );
     for my $status (@$status_values) {
         $template .= "# Status: $status\n";
     }
     $template .= "\n";
-    
+
     # Add patch complexity options
     my $complexity = $bug->{cf_patch_complexity} || "";
     $template .= "# Current patch-complexity: $complexity\n";
@@ -161,19 +162,19 @@ sub edit_attachment_comment {
         }
     }
     $template .= "\n";
-    
+
     # Add depends options
-    my $depends = $bug->{depends_on} || [];
-    my $depends_str = ref($depends) eq 'ARRAY' ? join(' ', @$depends) : $depends;
+    my $depends     = $bug->{depends_on} || [];
+    my $depends_str = ref($depends) eq 'ARRAY' ? join( ' ', @$depends ) : $depends;
     $template .= "# Current depends: $depends_str\n";
     $template .= "# Depends: bug xxxx\n";
     $template .= "# Depends: bug yyyy\n";
     $template .= "\n";
-    
+
     $template .= "# Please edit the description (first line) and comment (other lines).\n";
     $template .= "# Lines starting with '#' will be ignored. Delete everything to abort.\n";
     $template .= "# To obsolete existing patches, uncomment the appropriate lines.\n";
-    
+
     my $edited = $self->edit_template($template);
     return $self->parse_edited_content($edited);
 }
@@ -198,18 +199,16 @@ sub edit_template {
 
 sub parse_edited_content {
     my ( $self, $content ) = @_;
-    
+
     my @lines = split /\n/, $content;
-    my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;  # Also filter empty lines
-    
+    my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;    # Also filter empty lines
+
     my $description = shift @non_comment_lines || "";
     $description =~ s/^\s+|\s+$//g;
-    
 
-    
     my @obsoletes;
     my @comment_lines;
-    
+
     for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
@@ -217,12 +216,12 @@ sub parse_edited_content {
             push @comment_lines, $line;
         }
     }
-    
+
     my $comment = join( "\n", @comment_lines );
     $comment =~ s/^\s+|\s+$//g;
-    
+
     GitBz::Exception->throw("Empty description, aborting\n") unless $description;
-    
+
     return ( $description, $comment, \@obsoletes );
 }
 

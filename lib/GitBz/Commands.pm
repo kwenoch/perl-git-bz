@@ -16,7 +16,9 @@ package GitBz::Commands;
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
+
 use Try::Tiny qw(catch try);
+
 use GitBz::Exception;
 use GitBz::Config;
 use GitBz::RestClient;

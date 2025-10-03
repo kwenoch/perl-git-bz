@@ -40,7 +40,12 @@ sub run {
 
 sub rev_list {
     my ( $class, @args ) = @_;
-    my $output = $class->run( 'rev-list', '--pretty=format:%s', @args );
+
+    unshift( @args, '--pretty=format:%s' );
+    unshift( @args, '--max-count=1' )
+        if $args[1] eq 'HEAD';
+
+    my $output = $class->run( 'rev-list', @args );
 
     my @commits;
     my @lines = split /\n/, $output;
@@ -64,16 +69,18 @@ sub get_commits {
     my ( $class, $range ) = @_;
 
     # Try as single commit first - exactly like original git-bz
-    my $rev = try { 
+    my $rev = try {
         $class->run( 'rev-parse', $range, '--verify' );
-    } catch { 
-        undef 
+    } catch {
+        undef
     };
 
     if ($rev) {
+
         # Single commit - return just that one commit
         return $class->rev_list( '--max-count=1', $rev );
     } else {
+
         # Not a single commit, treat as range
         return $class->rev_list($range);
     }
