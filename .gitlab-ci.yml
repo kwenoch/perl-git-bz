@@ -13,7 +13,7 @@ test:
   stage: test
   parallel:
     matrix:
-      - PERL_VERSION: ["5.36", "5.38", "5.40"]
+      - PERL_VERSION: ["5.36", "5.38", "5.40", "5.42"]
   image: perl:${PERL_VERSION}
   before_script:
     - cpanm --installdeps --notest .
