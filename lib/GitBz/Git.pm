@@ -82,8 +82,9 @@ sub rev_list {
     my ( $class, @args ) = @_;
 
     unshift( @args, '--pretty=format:%s' );
+    unshift( @args, '--reverse' );  # Add --reverse to get chronological order (oldest first)
     unshift( @args, '--max-count=1' )
-        if $args[1] eq 'HEAD';
+        if $args[2] eq 'HEAD';  # Adjust index due to --reverse insertion
 
     my $output = $class->run( 'rev-list', @args );
 
