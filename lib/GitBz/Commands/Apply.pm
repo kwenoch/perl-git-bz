@@ -17,7 +17,7 @@ package GitBz::Commands::Apply;
 
 =head1 NAME
 
-GitBz::Commands::Apply - Apply patches from Bugzilla bugs
+GitBz::Commands::Apply - Apply patches from Bugzilla bugs with dependency cascading
 
 =head1 SYNOPSIS
 
@@ -29,6 +29,7 @@ GitBz::Commands::Apply - Apply patches from Bugzilla bugs
 =head1 DESCRIPTION
 
 Applies patch attachments from a Bugzilla bug to the current Git branch.
+Automatically handles dependency bugs by prompting to apply them first.
 Provides interactive patch selection and handles git-am workflow states.
 
 =cut
@@ -37,9 +38,13 @@ use Modern::Perl;
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use GitBz::Git;
+use GitBz::Bug;
 use GitBz::Exception;
 use File::Temp;
 use MIME::Base64;
+
+# Track applied bugs to avoid duplicates during recursive dependency resolution
+our @bugs_applied = ();
 
 =head2 new
 
@@ -85,12 +90,75 @@ sub execute {
         GitBz::Exception->throw("Usage: git bz apply [options] <bug-ref>") unless @args == 1;
 
         my $bug_ref = $args[0];
-        $self->apply_bug_patches( $bug_ref, \%opts );
+        
+        # Reset applied bugs tracking for new apply session
+        @bugs_applied = ();
+        
+        $self->apply_bug_with_dependencies( $bug_ref, \%opts );
 
         print "Successfully applied patches from bug $bug_ref\n";
     } catch {
         GitBz::Exception->throw("Apply failed: $_");
     };
+}
+
+=head2 apply_bug_with_dependencies
+
+    $apply->apply_bug_with_dependencies($bug_ref, \%opts);
+
+Applies a bug and its dependencies recursively.
+
+=cut
+
+sub apply_bug_with_dependencies {
+    my ( $self, $bug_ref, $opts ) = @_;
+
+    # Skip if already applied
+    return if grep { $_ eq $bug_ref } @bugs_applied;
+
+    my $client = $self->{commands}->{client};
+    my $bug = GitBz::Bug->get( $client, $bug_ref );
+
+    GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
+
+    # Handle dependencies first
+    my $dependencies = $bug->depends_on;
+    if ( $dependencies && @$dependencies ) {
+        for my $dep_id (@$dependencies) {
+            next if grep { $_ eq $dep_id } @bugs_applied;
+
+            my $dep_bug = GitBz::Bug->get( $client, $dep_id );
+            my $status = $dep_bug->status;
+
+            # Only prompt for dependencies in relevant states
+            if ( $status eq 'Needs Signoff' 
+                || $status eq 'Signed Off'
+                || $status eq 'Failed QA'
+                || $status eq 'Passed QA'
+                || $status eq 'BLOCKED' ) {
+                
+                print "\nBug $bug_ref depends on bug $dep_id ($status)\n";
+                my $choice = $self->prompt_multi( "Follow? [(y)es, (n)o]", [ "y", "n" ] );
+                
+                if ( $choice eq "y" ) {
+                    try {
+                        $self->apply_bug_with_dependencies( $dep_id, $opts );
+                    } catch {
+                        GitBz::Exception->throw(
+                            "Cannot apply cleanly patches from bug $dep_id. " .
+                            "Everything will be left dirty. $_"
+                        );
+                    };
+                }
+            }
+        }
+    }
+
+    # Apply the main bug
+    $self->apply_bug_patches( $bug_ref, $opts );
+    
+    # Track as applied
+    push @bugs_applied, $bug_ref;
 }
 
 =head2 handle_git_am_state
@@ -125,11 +193,11 @@ sub apply_bug_patches {
     my ( $self, $bug_ref, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = $client->get_bug($bug_ref);
+    my $bug = GitBz::Bug->get( $client, $bug_ref );
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
-    my $attachments = $client->get_attachments($bug_ref);
+    my $attachments = $bug->attachments;
 
     # Filter for patch attachments
     my @patches;
@@ -141,7 +209,7 @@ sub apply_bug_patches {
 
     GitBz::Exception->throw("No patch attachments found") unless @patches;
 
-    print "\nBug $bug_ref - $bug->{summary}\n\n";
+    print "\nBug $bug_ref - " . $bug->summary . "\n\n";
 
     for my $patch (@patches) {
         print "$patch->{id} - $patch->{summary}\n";
@@ -207,7 +275,7 @@ sub select_patches_interactively {
 
     # Create template for patch selection
     my $template = "";
-    $template .= "# Bug $bug->{id} - $bug->{summary}\n";
+    $template .= "# Bug " . $bug->id . " - " . $bug->summary . "\n";
     $template .= "# Select patches to apply by uncommenting the lines below\n";
     $template .= "# Lines starting with # are ignored\n\n";
 

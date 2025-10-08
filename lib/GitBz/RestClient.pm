@@ -141,7 +141,8 @@ Retrieves bug data from Bugzilla.
 sub get_bug {
     my ( $self, $bug_id ) = @_;
 
-    my $url      = sprintf( "%s/bug/%s", $self->{base_url}, $bug_id );
+    my $url = sprintf( "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity", 
+                       $self->{base_url}, $bug_id );
     my $response = $self->{ua}->get($url);
 
     if ( !$response->is_success ) {
