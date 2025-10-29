@@ -96,7 +96,7 @@ sub execute {
         
         $self->apply_bug_with_dependencies( $bug_ref, \%opts );
 
-        print "Successfully applied patches from bug $bug_ref\n";
+        print "\n✓ Successfully applied patches from bug $bug_ref\n";
     } catch {
         GitBz::Exception->throw("Apply failed: $_");
     };
@@ -137,7 +137,7 @@ sub apply_bug_with_dependencies {
                 || $status eq 'Passed QA'
                 || $status eq 'BLOCKED' ) {
                 
-                print "\nBug $bug_ref depends on bug $dep_id ($status)\n";
+                print "\n📋 Bug $bug_ref depends on bug $dep_id ($status)\n";
                 my $choice = $self->prompt_multi( "Follow? [(y)es, (n)o]", [ "y", "n" ] );
                 
                 if ( $choice eq "y" ) {
@@ -209,10 +209,10 @@ sub apply_bug_patches {
 
     GitBz::Exception->throw("No patch attachments found") unless @patches;
 
-    print "\nBug $bug_ref - " . $bug->summary . "\n\n";
+    print "\n📋 Bug $bug_ref - " . $bug->summary . "\n\n";
 
     for my $patch (@patches) {
-        print "$patch->{id} - $patch->{summary}\n";
+        print "  • $patch->{id} - $patch->{summary}\n";
     }
     print "\n";
 
@@ -310,12 +310,12 @@ sub select_patches_interactively {
     close $fh;
 
     if (@selected) {
-        print "Selected " . scalar(@selected) . " patch(es):\n";
+        print "\n✓ Selected " . scalar(@selected) . " patch(es):\n";
         for my $patch (@selected) {
-            print "  $patch->{summary}\n";
+            print "  • $patch->{summary}\n";
         }
     } else {
-        print "No patches selected\n";
+        print "\n⚠ No patches selected\n";
     }
 
     return @selected;
