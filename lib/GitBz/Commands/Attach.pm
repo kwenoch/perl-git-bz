@@ -178,7 +178,7 @@ sub preflight_checks {
         chomp $response;
         
         unless ( $response =~ /^[yY]/ ) {
-            GitBz::Exception->throw("Aborted due to bug number mismatch");
+            GitBz::Exception->throw("Aborted due to bug number mismatch\n");
         }
     }
 }
@@ -205,7 +205,7 @@ sub confirm_attachment {
     chomp $response;
     
     if ( $response =~ /^[nN]/ ) {
-        GitBz::Exception->throw("Attachment cancelled by user");
+        GitBz::Exception->throw("Attachment cancelled by user\n");
     }
 }
 
