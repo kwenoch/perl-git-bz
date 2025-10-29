@@ -440,14 +440,29 @@ sub parse_edited_content {
     my @lines = split /\n/, $content;
     my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;
 
-    my $description = shift @non_comment_lines || "";
-    $description =~ s/^\s+|\s+$//g;
+    # Extract description (first non-metadata line)
+    my $description = "";
+    my @remaining_lines = @non_comment_lines;
+    
+    # Find the first line that's not metadata
+    while (@remaining_lines) {
+        my $line = shift @remaining_lines;
+        if ( $line !~ /^\s*(Obsoletes|Status|Patch-complexity|Depends)\s*:/ ) {
+            $description = $line;
+            $description =~ s/^\s+|\s+$//g;
+            last;
+        } else {
+            # Put metadata line back for processing
+            unshift @remaining_lines, $line;
+            last;
+        }
+    }
 
     my @obsoletes;
     my @comment_lines;
     my %bug_updates;
 
-    for my $line (@non_comment_lines) {
+    for my $line (@remaining_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
         } elsif ( $line =~ /^\s*Status\s*:\s*(.+)/ ) {
