@@ -23,7 +23,8 @@ GitBz::Commands::Attach - Attach Git commits as patches to Bugzilla bugs
 
     git bz attach [options] [<bug-ref>] <commit-range>
     git bz attach --edit 12345 HEAD~2..HEAD
-    git bz attach HEAD  # Extracts bug ref from commit message
+    git bz attach --yes HEAD  # Skip confirmation prompts
+    git bz attach HEAD        # Extracts bug ref from commit message
 
 =head1 DESCRIPTION
 
@@ -75,6 +76,7 @@ sub execute {
     GetOptionsFromArray(
         \@args,
         'edit|e' => \$opts{edit},
+        'yes|y'  => \$opts{yes},
     ) or GitBz::Exception->throw("Invalid options");
 
     return try {
@@ -138,6 +140,75 @@ sub extract_bug_ref {
     return;
 }
 
+=head2 preflight_checks
+
+    $attach->preflight_checks($bug_ref, \@commits);
+
+Performs preflight checks before attaching patches.
+
+=cut
+
+sub preflight_checks {
+    my ( $self, $bug_ref, $commits ) = @_;
+
+    my @mismatched_bugs;
+    
+    for my $commit (@$commits) {
+        my $commit_bug_ref = $self->extract_bug_ref($commit);
+        if ( $commit_bug_ref && $commit_bug_ref ne $bug_ref ) {
+            push @mismatched_bugs, {
+                commit => substr($commit->{id}, 0, 7),
+                subject => $commit->{subject},
+                bug_ref => $commit_bug_ref
+            };
+        }
+    }
+
+    if (@mismatched_bugs) {
+        print "\n🚨 ALERT: Bug number mismatch detected!\n";
+        print "Attaching to bug $bug_ref, but found commits with different bug numbers:\n\n";
+        
+        for my $mismatch (@mismatched_bugs) {
+            print "  $mismatch->{commit}: $mismatch->{subject}\n";
+            print "    → References bug $mismatch->{bug_ref} (not $bug_ref)\n\n";
+        }
+        
+        print "Continue anyway? [y/N]: ";
+        my $response = <STDIN>;
+        chomp $response;
+        
+        unless ( $response =~ /^[yY]/ ) {
+            GitBz::Exception->throw("Aborted due to bug number mismatch");
+        }
+    }
+}
+
+=head2 confirm_attachment
+
+    $attach->confirm_attachment($bug_ref, \@commits);
+
+Shows confirmation prompt before attaching patches.
+
+=cut
+
+sub confirm_attachment {
+    my ( $self, $bug_ref, $commits ) = @_;
+
+    print "\nReady to attach " . scalar(@$commits) . " patch(es) to bug $bug_ref:\n\n";
+    
+    for my $commit (@$commits) {
+        print "  " . substr($commit->{id}, 0, 7) . ": $commit->{subject}\n";
+    }
+    
+    print "\nProceed with attachment? [Y/n]: ";
+    my $response = <STDIN>;
+    chomp $response;
+    
+    if ( $response =~ /^[nN]/ ) {
+        GitBz::Exception->throw("Attachment cancelled by user");
+    }
+}
+
 =head2 attach_patches
 
     $attach->attach_patches($bug_ref, \@commits, \%opts);
@@ -151,6 +222,12 @@ sub attach_patches {
 
     my $client = $self->{client};
     my $bug    = GitBz::Bug->get( $client, $bug_ref );
+
+    # Preflight checks
+    $self->preflight_checks( $bug_ref, $commits );
+
+    # Show confirmation prompt
+    $self->confirm_attachment( $bug_ref, $commits ) unless $opts->{yes};
 
     my $is_first = 1;
     my %bug_updates;
