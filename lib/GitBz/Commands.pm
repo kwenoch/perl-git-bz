@@ -70,6 +70,7 @@ sub new {
     # Auto-login if credentials available
     my $username = $ENV{BUGZILLA_USER};
     my $password = $ENV{BUGZILLA_PASSWORD};
+    my $git_credential_info;
 
     # Try git config if env vars not set
     if ( !$username || !$password ) {
@@ -77,26 +78,53 @@ sub new {
         my $tracker_config  = $config->{config}->{$tracker_section};
 
         # Check if git-credential should be used
-        my $use_git_credential = $tracker_config->{'use-git-credential'} 
+        my $use_git_credential = $tracker_config->{'use-git-credential'}
             && $tracker_config->{'use-git-credential'} eq 'true';
 
         if ($use_git_credential) {
-            ($username, $password) = __PACKAGE__->_get_git_credentials($tracker, $tracker_config);
+            ( $username, $password ) = $class->_get_git_credentials( $tracker, $tracker_config );
+
+            # Store credential info for later approval/rejection
+            if ( $username && $password ) {
+                $git_credential_info = {
+                    tracker        => $tracker,
+                    tracker_config => $tracker_config,
+                    username       => $username,
+                    password       => $password,
+                };
+            }
         } else {
             $username ||= $tracker_config->{'bz-user'}     if $tracker_config;
             $password ||= $tracker_config->{'bz-password'} if $tracker_config;
         }
     }
 
-    if ( $username && $password ) {
-        $client->login( $username, $password );
-    }
-
-    return bless {
+    my $self = bless {
         config  => $config,
         client  => $client,
         tracker => $tracker,
     }, $class;
+
+    if ( $username && $password ) {
+        eval {
+            $client->login( $username, $password );
+
+            # Approve git credential on successful login
+            if ($git_credential_info) {
+                $class->_approve_git_credential($git_credential_info);
+            }
+        };
+        if ($@) {
+
+            # Reject git credential on failed login
+            if ($git_credential_info) {
+                $class->_reject_git_credential($git_credential_info);
+            }
+            die $@;
+        }
+    }
+
+    return $self;
 }
 
 =head2 _get_git_credentials
@@ -108,37 +136,89 @@ Uses git credential helper to retrieve credentials for the tracker.
 =cut
 
 sub _get_git_credentials {
-    my ($class, $tracker, $tracker_config) = @_;
-    
+    my ( $class, $tracker, $tracker_config ) = @_;
+
     my $protocol = $tracker_config->{https} ? 'https' : 'http';
-    my $path = $tracker_config->{path} || '';
-    $path =~ s|^/||; # Remove leading slash for git credential
-    
+    my $path     = $tracker_config->{path} || '';
+    $path =~ s|^/||;    # Remove leading slash for git credential
+
     my $input = "protocol=$protocol\n";
     $input .= "host=$tracker\n";
     $input .= "path=$path\n" if $path;
     $input .= "\n";
-    
+
     my $output;
-    eval {
-        $output = GitBz::Git->run_with_input($input, 'credential', 'fill');
-    };
-    
+    eval { $output = GitBz::Git->run_with_input( $input, 'credential', 'fill' ); };
+
     if ($@) {
         warn "Failed to get git credentials: $@";
-        return (undef, undef);
+        return ( undef, undef );
     }
-    
-    my ($username, $password);
-    for my $line (split /\n/, $output) {
-        if ($line =~ /^username=(.*)$/) {
+
+    my ( $username, $password );
+    for my $line ( split /\n/, $output ) {
+        if ( $line =~ /^username=(.*)$/ ) {
             $username = $1;
-        } elsif ($line =~ /^password=(.*)$/) {
+        } elsif ( $line =~ /^password=(.*)$/ ) {
             $password = $1;
         }
     }
-    
-    return ($username, $password);
+
+    return ( $username, $password );
+}
+
+=head2 _approve_git_credential
+
+    GitBz::Commands->_approve_git_credential($credential_info);
+
+Approves the git credential after successful login.
+
+=cut
+
+sub _approve_git_credential {
+    my ( $class, $info ) = @_;
+
+    my $protocol = $info->{tracker_config}->{https} ? 'https' : 'http';
+    my $path     = $info->{tracker_config}->{path} || '';
+    $path =~ s|^/||;
+
+    my $input = "protocol=$protocol\n";
+    $input .= "host=$info->{tracker}\n";
+    $input .= "path=$path\n" if $path;
+    $input .= "username=$info->{username}\n";
+    $input .= "password=$info->{password}\n";
+    $input .= "\n";
+
+    eval { GitBz::Git->run_with_input( $input, 'credential', 'approve' ); };
+
+    # Ignore errors - credential approval is best effort
+}
+
+=head2 _reject_git_credential
+
+    GitBz::Commands->_reject_git_credential($credential_info);
+
+Rejects the git credential after failed login.
+
+=cut
+
+sub _reject_git_credential {
+    my ( $class, $info ) = @_;
+
+    my $protocol = $info->{tracker_config}->{https} ? 'https' : 'http';
+    my $path     = $info->{tracker_config}->{path} || '';
+    $path =~ s|^/||;
+
+    my $input = "protocol=$protocol\n";
+    $input .= "host=$info->{tracker}\n";
+    $input .= "path=$path\n" if $path;
+    $input .= "username=$info->{username}\n";
+    $input .= "password=$info->{password}\n";
+    $input .= "\n";
+
+    eval { GitBz::Git->run_with_input( $input, 'credential', 'reject' ); };
+
+    # Ignore errors - credential rejection is best effort
 }
 
 =head2 dispatch

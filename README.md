@@ -37,47 +37,29 @@ git config bz-tracker.bugs.koha-community.org.bz-password your-password
 ### Alternative: Environment Variables
 
 ```bash
-# Set default Bugzilla tracker
-git config bz.default-tracker bugs.koha-community.org
-
-# Set credentials via environment variables
 export BUGZILLA_USER=your-email@example.com
 export BUGZILLA_PASSWORD=your-password
 ```
 
-### Optional: Git Credential Helper (In Development)
+### Optional: Git Credential Helper (Enhanced Security)
 
-For enhanced security using git's credential management system:
+For secure credential management using git's credential system:
 
 ```bash
-# Set default Bugzilla tracker
-git config bz.default-tracker bugs.koha-community.org
+# Enable git credential integration
+git config bz-tracker.bugs.koha-community.org.use-git-credential true
 
-# Configure git credential helper
-git config --global credential.helper 'cache --timeout 3600'  # timeout in seconds
+# Configure credential helper (choose one):
+git config --global credential.helper osxkeychain           # macOS (secure)
+git config --global credential.helper libsecret             # Linux (secure) 
+git config --global credential.helper manager-core         # Windows (secure)
+git config --global credential.helper store                 # Cross-platform (plaintext)
+
+# Set username for the tracker
 git config --global credential.https://bugs.koha-community.org.username your-email@example.com
-git config --global bz-tracker.bugs.koha-community.org.use-git-credential true
 ```
 
-**Alternative credential helpers:**
-```bash
-# Use system keychain (macOS/Linux)
-git config --global credential.helper osxkeychain  # macOS
-git config --global credential.helper libsecret    # Linux
-
-# Use Windows Credential Manager
-git config --global credential.helper manager-core # Windows
-```
-
-**Testing git credential availability:**
-```bash
-# Test if git credential is available
-git credential fill
-# (Press Ctrl+C to cancel if it waits for input - this means it's working)
-
-# Check current credential helper
-git config --global credential.helper
-```
+**Benefits:** Secure encrypted storage, unified credential management, automatic approval/rejection feedback to help credential helpers learn from login attempts.
 
 ## Usage
 
