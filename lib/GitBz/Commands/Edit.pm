@@ -73,8 +73,6 @@ sub execute {
     GetOptionsFromArray(
         \@args,
         'pushed'       => \$opts{pushed},
-        'add-url|u'    => \$opts{'add-url'},
-        'no-add-url|n' => sub { $opts{'add-url'} = 0 },
         'fix=s'        => \$opts{fix},
         'bugzilla|b=s' => \$opts{bugzilla},
     ) or GitBz::Exception->throw("Invalid options");

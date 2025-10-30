@@ -51,8 +51,6 @@ my $DEFAULT_CONFIG = {
 
 my $GIT_CONFIG = {
     'default-tracker' => 'bugs.koha-community.org',
-    'add-url'         => 'true',
-    'browser'         => 'firefox',
 };
 
 =head2 load
