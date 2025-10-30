@@ -152,12 +152,12 @@ sub preflight_checks {
     my ( $self, $bug_ref, $commits ) = @_;
 
     my @mismatched_bugs;
-    
+
     for my $commit (@$commits) {
         my $commit_bug_ref = $self->extract_bug_ref($commit);
         if ( $commit_bug_ref && $commit_bug_ref ne $bug_ref ) {
             push @mismatched_bugs, {
-                commit => substr($commit->{id}, 0, 7),
+                commit  => substr( $commit->{id}, 0, 7 ),
                 subject => $commit->{subject},
                 bug_ref => $commit_bug_ref
             };
@@ -167,16 +167,16 @@ sub preflight_checks {
     if (@mismatched_bugs) {
         print "\n🚨 ALERT: Bug number mismatch detected!\n";
         print "Attaching to bug $bug_ref, but found commits with different bug numbers:\n\n";
-        
+
         for my $mismatch (@mismatched_bugs) {
             print "  $mismatch->{commit}: $mismatch->{subject}\n";
             print "    → References bug $mismatch->{bug_ref} (not $bug_ref)\n\n";
         }
-        
+
         print "Continue anyway? [y/N]: ";
         my $response = <STDIN>;
         chomp $response;
-        
+
         unless ( $response =~ /^[yY]/ ) {
             GitBz::Exception->throw("Aborted due to bug number mismatch\n");
         }
@@ -195,15 +195,15 @@ sub confirm_attachment {
     my ( $self, $bug_ref, $commits ) = @_;
 
     print "\nReady to attach " . scalar(@$commits) . " patch(es) to bug $bug_ref:\n\n";
-    
+
     for my $commit (@$commits) {
-        print "  " . substr($commit->{id}, 0, 7) . ": $commit->{subject}\n";
+        print "  " . substr( $commit->{id}, 0, 7 ) . ": $commit->{subject}\n";
     }
-    
+
     print "\nProceed with attachment? [Y/n]: ";
     my $response = <STDIN>;
     chomp $response;
-    
+
     if ( $response =~ /^[nN]/ ) {
         GitBz::Exception->throw("Attachment cancelled by user\n");
     }
@@ -229,9 +229,15 @@ sub attach_patches {
     # Show confirmation prompt
     $self->confirm_attachment( $bug_ref, $commits ) unless $opts->{yes};
 
-    my $is_first = 1;
+    # Handle edit mode - bug-level updates only, not per-commit
     my %bug_updates;
     my @obsoletes_list;
+
+    if ( $opts->{edit} ) {
+        ( my $bug_comment, my $obsoletes_ref, my $updates_ref ) = $self->edit_bug_updates( $bug, $commits );
+        @obsoletes_list = @$obsoletes_ref if $obsoletes_ref;
+        %bug_updates    = %$updates_ref   if $updates_ref;
+    }
 
     for my $commit (@$commits) {
         my $patch       = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
@@ -239,15 +245,9 @@ sub attach_patches {
         my $description = $commit->{subject};
         my $body        = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
         my $comment     = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
-        my @obsoletes;
 
-        if ( $opts->{edit} && $is_first ) {
-            ( $description, $comment, my $obsoletes_ref, my $updates_ref ) =
-                $self->edit_attachment_comment( $bug, $commit );
-            @obsoletes   = @$obsoletes_ref if $obsoletes_ref;
-            %bug_updates = %$updates_ref   if $updates_ref;
-            push @obsoletes_list, @obsoletes;
-        }
+        # Always use commit message as attachment comment
+        # Edit mode only affects bug-level updates, not attachment comments
 
         eval {
             $bug->add_attachment(
@@ -257,16 +257,15 @@ sub attach_patches {
                 comment => $comment,
             );
         };
-        
+
         if ($@) {
             print "✗ Failed to attach: $description\n";
             print "Error: $@\n";
-            return; # Skip remaining steps
+            return;    # Skip remaining steps
         }
 
         # Store attachment info for later display
         push @{ $self->{_attached} }, $description;
-        $is_first = 0;
     }
 
     # Show all updates together
@@ -323,34 +322,45 @@ sub attach_patches {
     # Obsoletes are now handled in the unified update section above
 }
 
-=head2 edit_attachment_comment
+=head2 edit_bug_updates
 
-    my ($desc, $comment, $obsoletes, $updates) = 
-        $attach->edit_attachment_comment($bug, $commit);
+    my ($bug_comment, $obsoletes, $updates) = 
+        $attach->edit_bug_updates($bug, \@commits);
 
-Provides interactive editing of attachment details and bug fields.
+Provides interactive editing of bug fields and optional comment.
 
 =cut
 
-sub edit_attachment_comment {
-    my ( $self, $bug, $commit ) = @_;
+sub edit_bug_updates {
+    my ( $self, $bug, $commits ) = @_;
 
     my $client = $self->{client};
 
     my $template = "";
-    $template .= "# Attachment to Bug " . $bug->id . " - " . $bug->summary . "\n\n";
-    $template .= $commit->{subject} . "\n\n";
+    $template .= "# Bug Update for Bug " . $bug->id . " - " . $bug->summary . "\n\n";
 
-    # Add commit body as initial comment
-    my $body = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
-    $template .= $body . "\n\n" if $body;
+    # Show commits being attached as reference
+    $template .= "# Commits being attached:\n";
+    for my $commit (@$commits) {
+        $template .= "# " . substr( $commit->{id}, 0, 7 ) . ": $commit->{subject}\n";
+    }
+    $template .= "\n";
+
+    # Add optional bug comment section
+    $template .= "# Add optional bug comment below (leave empty for no comment):\n\n\n";
 
     # Show existing patches for obsoleting
     my $attachments = $bug->attachments;
     if ( $attachments && @$attachments ) {
+
+        # Build list of commit subjects for matching
+        my %commit_subjects = map { $_->{subject} => 1 } @$commits;
+
         for my $patch (@$attachments) {
             next unless $patch->{is_patch} && !$patch->{is_obsolete};
-            my $obsoleted = ( $commit->{subject} eq $patch->{summary} ) ? "" : "#";
+
+            # Uncomment if any commit subject matches this patch summary
+            my $obsoleted = $commit_subjects{ $patch->{summary} } ? "" : "#";
             $template .= "${obsoleted}Obsoletes: $patch->{id} - $patch->{summary}\n";
         }
         $template .= "\n";
@@ -396,7 +406,7 @@ sub edit_attachment_comment {
     $template .= "# To obsolete existing patches, uncomment the appropriate lines.\n";
 
     my $edited = $self->edit_template($template);
-    return $self->parse_edited_content( $edited, $bug );
+    return $self->parse_bug_updates( $edited, $bug );
 }
 
 =head2 edit_template
@@ -411,58 +421,40 @@ sub edit_template {
     my ( $self, $template ) = @_;
 
     my $temp = File::Temp->new( SUFFIX => '.txt' );
-    binmode $temp, ':utf8';
+    binmode $temp, ':encoding(UTF-8)';
     print $temp $template;
     close $temp;
 
     my $editor = $ENV{EDITOR} || $ENV{GIT_EDITOR} || 'vi';
     system( $editor, $temp->filename );
 
-    open my $fh, '<:utf8', $temp->filename or die "Cannot read temp file: $!";
+    open my $fh, '<:encoding(UTF-8)', $temp->filename or die "Cannot read temp file: $!";
     my $content = do { local $/; <$fh> };
     close $fh;
 
     return $content;
 }
 
-=head2 parse_edited_content
+=head2 parse_bug_updates
 
-    my ($desc, $comment, $obsoletes, $updates) = 
-        $attach->parse_edited_content($edited_content, $bug);
+    my ($bug_comment, $obsoletes, $updates) = 
+        $attach->parse_bug_updates($edited_content, $bug);
 
-Parses the edited template content and extracts changes.
+Parses the edited template content and extracts bug-level changes.
 
 =cut
 
-sub parse_edited_content {
+sub parse_bug_updates {
     my ( $self, $content, $bug ) = @_;
 
     my @lines = split /\n/, $content;
-    my @non_comment_lines = grep { !/^#/ && /\S/ } @lines;
-
-    # Extract description (first non-metadata line)
-    my $description = "";
-    my @remaining_lines = @non_comment_lines;
-    
-    # Find the first line that's not metadata
-    while (@remaining_lines) {
-        my $line = shift @remaining_lines;
-        if ( $line !~ /^\s*(Obsoletes|Status|Patch-complexity|Depends)\s*:/ ) {
-            $description = $line;
-            $description =~ s/^\s+|\s+$//g;
-            last;
-        } else {
-            # Put metadata line back for processing
-            unshift @remaining_lines, $line;
-            last;
-        }
-    }
+    my @non_comment_lines = grep { !/^#/ } @lines;
 
     my @obsoletes;
-    my @comment_lines;
+    my @bug_comment_lines;
     my %bug_updates;
 
-    for my $line (@remaining_lines) {
+    for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
         } elsif ( $line =~ /^\s*Status\s*:\s*(.+)/ ) {
@@ -472,15 +464,18 @@ sub parse_edited_content {
         } elsif ( $line =~ /^\s*Depends\s*:\s*([Bb][Uu][Gg])?\s*(\d+)/ ) {
             push @{ $bug_updates{depends_on} }, $2;
         } else {
-            push @comment_lines, $line;
+
+            # Everything else is bug-level comment
+            push @bug_comment_lines, $line;
         }
     }
 
-    my $comment = join( "\n", @comment_lines );
-    $comment =~ s/^\s+|\s+$//g;
+    my $bug_comment = join( "\n", @bug_comment_lines );
+    $bug_comment =~ s/^\s+//;    # Remove leading whitespace
+    $bug_comment =~ s/\s+$//;    # Remove trailing whitespace
 
-    if ($comment) {
-        $bug_updates{comment} = { body => $comment };
+    if ($bug_comment) {
+        $bug_updates{comment} = { body => $bug_comment };
     }
 
     # Convert depends_on to proper API format with add/remove actions
@@ -507,9 +502,7 @@ sub parse_edited_content {
         }
     }
 
-    GitBz::Exception->throw("Empty description, aborting\n") unless $description;
-
-    return ( $description, $comment, \@obsoletes, \%bug_updates );
+    return ( $bug_comment, \@obsoletes, \%bug_updates );
 }
 
 1;

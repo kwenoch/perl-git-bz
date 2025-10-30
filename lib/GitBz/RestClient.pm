@@ -141,8 +141,10 @@ Retrieves bug data from Bugzilla.
 sub get_bug {
     my ( $self, $bug_id ) = @_;
 
-    my $url = sprintf( "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity", 
-                       $self->{base_url}, $bug_id );
+    my $url = sprintf(
+        "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity",
+        $self->{base_url}, $bug_id
+    );
     my $response = $self->{ua}->get($url);
 
     if ( !$response->is_success ) {
@@ -199,8 +201,8 @@ sub add_attachment {
 
     $payload->{comment} = $opts{comment} if $opts{comment};
     my $token = $self->get_token();
-    warn "DEBUG: Token for add_attachment: " . ($token || 'NONE') . "\n" if $ENV{DEBUG};
-    $payload->{token} = $token if $token;
+    warn "DEBUG: Token for add_attachment: " . ( $token || 'NONE' ) . "\n" if $ENV{DEBUG};
+    $payload->{token} = $token                                             if $token;
 
     my $response = $self->{ua}->post(
         $url,

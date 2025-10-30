@@ -63,6 +63,9 @@ sub run {
         }
         if ($stdout) {
             chomp $stdout;
+
+            # Decode UTF-8 from Git output
+            $stdout = decode( 'UTF-8', $stdout, Encode::FB_CROAK );
         }
         return $stdout || '';
     } catch {
@@ -82,9 +85,9 @@ sub rev_list {
     my ( $class, @args ) = @_;
 
     unshift( @args, '--pretty=format:%s' );
-    unshift( @args, '--reverse' );  # Add --reverse to get chronological order (oldest first)
+    unshift( @args, '--reverse' );            # Add --reverse to get chronological order (oldest first)
     unshift( @args, '--max-count=1' )
-        if $args[2] eq 'HEAD';  # Adjust index due to --reverse insertion
+        if $args[2] eq 'HEAD';                # Adjust index due to --reverse insertion
 
     my $output = $class->run( 'rev-list', @args );
 

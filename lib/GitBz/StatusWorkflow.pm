@@ -60,21 +60,21 @@ Based on Koha Bugzilla workflow rules.
 
 sub get_next_status_values {
     my ( $self, $current_status ) = @_;
-    
+
     # Koha Bugzilla workflow transitions
     my %transitions = (
-        'NEW'           => ['ASSIGNED', 'Needs Signoff', 'RESOLVED'],
-        'ASSIGNED'      => ['Needs Signoff', 'RESOLVED'],
-        'Needs Signoff' => ['Signed Off', 'Failed QA', 'RESOLVED'],
-        'Signed Off'    => ['Passed QA', 'Failed QA', 'RESOLVED'],
-        'Failed QA'     => ['Needs Signoff', 'RESOLVED'],
-        'Passed QA'     => ['Pushed to Master', 'Pushed to Stable', 'RESOLVED'],
+        'NEW'              => [ 'ASSIGNED',         'Needs Signoff', 'RESOLVED' ],
+        'ASSIGNED'         => [ 'Needs Signoff',    'RESOLVED' ],
+        'Needs Signoff'    => [ 'Signed Off',       'Failed QA', 'RESOLVED' ],
+        'Signed Off'       => [ 'Passed QA',        'Failed QA', 'RESOLVED' ],
+        'Failed QA'        => [ 'Needs Signoff',    'RESOLVED' ],
+        'Passed QA'        => [ 'Pushed to Master', 'Pushed to Stable', 'RESOLVED' ],
         'Pushed to Master' => ['RESOLVED'],
         'Pushed to Stable' => ['RESOLVED'],
-        'RESOLVED'      => ['REOPENED'],
-        'REOPENED'      => ['ASSIGNED', 'Needs Signoff', 'RESOLVED'],
+        'RESOLVED'         => ['REOPENED'],
+        'REOPENED'         => [ 'ASSIGNED', 'Needs Signoff', 'RESOLVED' ],
     );
-    
+
     return $transitions{$current_status} || [];
 }
 
@@ -87,7 +87,7 @@ Returns arrayref of all possible bug status values from Bugzilla.
 =cut
 
 sub get_all_status_values {
-    my ( $self ) = @_;
+    my ($self) = @_;
     return $self->{client}->get_field_values('bug_status');
 }
 

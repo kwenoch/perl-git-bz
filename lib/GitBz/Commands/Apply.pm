@@ -90,10 +90,10 @@ sub execute {
         GitBz::Exception->throw("Usage: git bz apply [options] <bug-ref>") unless @args == 1;
 
         my $bug_ref = $args[0];
-        
+
         # Reset applied bugs tracking for new apply session
         @bugs_applied = ();
-        
+
         $self->apply_bug_with_dependencies( $bug_ref, \%opts );
 
         print "\n✓ Successfully applied patches from bug $bug_ref\n";
@@ -117,7 +117,7 @@ sub apply_bug_with_dependencies {
     return if grep { $_ eq $bug_ref } @bugs_applied;
 
     my $client = $self->{commands}->{client};
-    my $bug = GitBz::Bug->get( $client, $bug_ref );
+    my $bug    = GitBz::Bug->get( $client, $bug_ref );
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
@@ -128,26 +128,25 @@ sub apply_bug_with_dependencies {
             next if grep { $_ eq $dep_id } @bugs_applied;
 
             my $dep_bug = GitBz::Bug->get( $client, $dep_id );
-            my $status = $dep_bug->status;
+            my $status  = $dep_bug->status;
 
             # Only prompt for dependencies in relevant states
-            if ( $status eq 'Needs Signoff' 
+            if (   $status eq 'Needs Signoff'
                 || $status eq 'Signed Off'
                 || $status eq 'Failed QA'
                 || $status eq 'Passed QA'
-                || $status eq 'BLOCKED' ) {
-                
+                || $status eq 'BLOCKED' )
+            {
+
                 print "\n📋 Bug $bug_ref depends on bug $dep_id ($status)\n";
                 my $choice = $self->prompt_multi( "Follow? [(y)es, (n)o]", [ "y", "n" ] );
-                
+
                 if ( $choice eq "y" ) {
                     try {
                         $self->apply_bug_with_dependencies( $dep_id, $opts );
                     } catch {
                         GitBz::Exception->throw(
-                            "Cannot apply cleanly patches from bug $dep_id. " .
-                            "Everything will be left dirty. $_"
-                        );
+                            "Cannot apply cleanly patches from bug $dep_id. " . "Everything will be left dirty. $_" );
                     };
                 }
             }
@@ -156,7 +155,7 @@ sub apply_bug_with_dependencies {
 
     # Apply the main bug
     $self->apply_bug_patches( $bug_ref, $opts );
-    
+
     # Track as applied
     push @bugs_applied, $bug_ref;
 }
@@ -193,7 +192,7 @@ sub apply_bug_patches {
     my ( $self, $bug_ref, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug = GitBz::Bug->get( $client, $bug_ref );
+    my $bug    = GitBz::Bug->get( $client, $bug_ref );
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
