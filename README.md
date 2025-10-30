@@ -17,9 +17,16 @@ A Perl implementation of git-bz for Koha development workflow using Bugzilla's R
 # Install dependencies
 cpanm --installdeps .
 
-# Make executable available
-export PATH="$PWD/bin:$PATH"
+# Add to your shell configuration for persistent access
+echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc  # For bash
+echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.zshrc   # For zsh
+
+# Reload your shell configuration
+source ~/.bashrc  # For bash
+source ~/.zshrc   # For zsh
 ```
+
+**Note:** Adjust the path (`$HOME/git/perl-git-bz/bin`) to match where you cloned the repository.
 
 ## Configuration
 
