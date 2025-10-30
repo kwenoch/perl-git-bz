@@ -23,25 +23,60 @@ export PATH="$PWD/bin:$PATH"
 
 ## Configuration
 
-### Git Configuration (Recommended)
+### Standard Setup
 
 ```bash
 # Set default Bugzilla tracker
 git config bz.default-tracker bugs.koha-community.org
 
-# Set credentials (stored in git config)
+# Set credentials
 git config bz-tracker.bugs.koha-community.org.bz-user your-email@example.com
 git config bz-tracker.bugs.koha-community.org.bz-password your-password
 ```
 
-### Environment Variables (Alternative)
-
-You can also use environment variables instead of git config:
+### Alternative: Environment Variables
 
 ```bash
-# Set credentials
+# Set default Bugzilla tracker
+git config bz.default-tracker bugs.koha-community.org
+
+# Set credentials via environment variables
 export BUGZILLA_USER=your-email@example.com
 export BUGZILLA_PASSWORD=your-password
+```
+
+### Optional: Git Credential Helper (In Development)
+
+For enhanced security using git's credential management system:
+
+```bash
+# Set default Bugzilla tracker
+git config bz.default-tracker bugs.koha-community.org
+
+# Configure git credential helper
+git config --global credential.helper 'cache --timeout 3600'  # timeout in seconds
+git config --global credential.https://bugs.koha-community.org.username your-email@example.com
+git config --global bz-tracker.bugs.koha-community.org.use-git-credential true
+```
+
+**Alternative credential helpers:**
+```bash
+# Use system keychain (macOS/Linux)
+git config --global credential.helper osxkeychain  # macOS
+git config --global credential.helper libsecret    # Linux
+
+# Use Windows Credential Manager
+git config --global credential.helper manager-core # Windows
+```
+
+**Testing git credential availability:**
+```bash
+# Test if git credential is available
+git credential fill
+# (Press Ctrl+C to cancel if it waits for input - this means it's working)
+
+# Check current credential helper
+git config --global credential.helper
 ```
 
 ## Usage

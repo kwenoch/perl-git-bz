@@ -76,8 +76,16 @@ sub new {
         my $tracker_section = qq{bz-tracker "$tracker"};
         my $tracker_config  = $config->{config}->{$tracker_section};
 
-        $username ||= $tracker_config->{'bz-user'}     if $tracker_config;
-        $password ||= $tracker_config->{'bz-password'} if $tracker_config;
+        # Check if git-credential should be used
+        my $use_git_credential = $tracker_config->{'use-git-credential'} 
+            && $tracker_config->{'use-git-credential'} eq 'true';
+
+        if ($use_git_credential) {
+            ($username, $password) = __PACKAGE__->_get_git_credentials($tracker, $tracker_config);
+        } else {
+            $username ||= $tracker_config->{'bz-user'}     if $tracker_config;
+            $password ||= $tracker_config->{'bz-password'} if $tracker_config;
+        }
     }
 
     if ( $username && $password ) {
@@ -89,6 +97,48 @@ sub new {
         client  => $client,
         tracker => $tracker,
     }, $class;
+}
+
+=head2 _get_git_credentials
+
+    my ($username, $password) = $commands->_get_git_credentials($tracker, $tracker_config);
+
+Uses git credential helper to retrieve credentials for the tracker.
+
+=cut
+
+sub _get_git_credentials {
+    my ($class, $tracker, $tracker_config) = @_;
+    
+    my $protocol = $tracker_config->{https} ? 'https' : 'http';
+    my $path = $tracker_config->{path} || '';
+    $path =~ s|^/||; # Remove leading slash for git credential
+    
+    my $input = "protocol=$protocol\n";
+    $input .= "host=$tracker\n";
+    $input .= "path=$path\n" if $path;
+    $input .= "\n";
+    
+    my $output;
+    eval {
+        $output = GitBz::Git->run_with_input($input, 'credential', 'fill');
+    };
+    
+    if ($@) {
+        warn "Failed to get git credentials: $@";
+        return (undef, undef);
+    }
+    
+    my ($username, $password);
+    for my $line (split /\n/, $output) {
+        if ($line =~ /^username=(.*)$/) {
+            $username = $1;
+        } elsif ($line =~ /^password=(.*)$/) {
+            $password = $1;
+        }
+    }
+    
+    return ($username, $password);
 }
 
 =head2 dispatch

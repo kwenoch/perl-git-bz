@@ -73,6 +73,36 @@ sub run {
     };
 }
 
+=head2 run_with_input
+
+    my $output = GitBz::Git->run_with_input($input, $command, @args);
+
+Executes a Git command with input piped to stdin and returns the output.
+
+=cut
+
+sub run_with_input {
+    my ( $class, $input, $command, @args ) = @_;
+
+    my @cmd = ( 'git', $command, @args );
+    my ( $stdout, $stderr );
+
+    return try {
+        run3 \@cmd, \$input, \$stdout, \$stderr;
+        if ( $? != 0 ) {
+            GitBz::Exception::Git->throw("Git command failed: $stderr");
+        }
+        if ($stdout) {
+            chomp $stdout;
+            # Decode UTF-8 from Git output
+            $stdout = decode('UTF-8', $stdout, Encode::FB_CROAK);
+        }
+        return $stdout || '';
+    } catch {
+        GitBz::Exception::Git->throw($_);
+    };
+}
+
 =head2 rev_list
 
     my @commits = GitBz::Git->rev_list(@args);
