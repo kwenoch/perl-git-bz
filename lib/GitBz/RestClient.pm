@@ -190,19 +190,11 @@ sub add_attachment {
 
     my $url = sprintf( "%s/bug/%s/attachment", $self->{base_url}, $bug_id );
 
-    my $payload = {
-        ids          => [$bug_id],
-        data         => encode_base64($data),
-        file_name    => $filename,
-        summary      => $summary,
-        content_type => 'text/plain',
-        is_patch     => JSON::true,
-    };
-
-    $payload->{comment} = $opts{comment} if $opts{comment};
+    my $payload = $self->_create_attachment_payload($bug_id, $data, $filename, $summary, %opts);
+    
     my $token = $self->get_token();
     warn "DEBUG: Token for add_attachment: " . ( $token || 'NONE' ) . "\n" if $ENV{DEBUG};
-    $payload->{token} = $token                                             if $token;
+    $payload->{token} = $token if $token;
 
     my $response = $self->{ua}->post(
         $url,
@@ -313,6 +305,33 @@ sub obsolete_attachment {
     }
 
     return decode_json( $response->content );
+}
+
+# Internal methods
+
+=head2 _create_attachment_payload
+
+    my $payload = $client->_create_attachment_payload($bug_id, $data, $filename, $summary, %opts);
+
+Internal method to create attachment payload for Bugzilla REST API.
+Returns hashref suitable for JSON encoding.
+
+=cut
+
+sub _create_attachment_payload {
+    my ( $self, $bug_id, $data, $filename, $summary, %opts ) = @_;
+
+    my $payload = {
+        ids          => [$bug_id],
+        data         => encode_base64($data),
+        file_name    => $filename,
+        summary      => $summary,
+        content_type => 'text/plain',
+        is_patch     => JSON::true,
+    };
+
+    $payload->{comment} = $opts{comment} if $opts{comment};
+    return $payload;
 }
 
 1;
