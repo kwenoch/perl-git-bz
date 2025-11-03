@@ -44,6 +44,7 @@ use Modern::Perl;
 use LWP::UserAgent;
 use JSON;
 use MIME::Base64;
+use Encode qw(encode decode);
 use GitBz::Exception;
 
 =head2 new
@@ -330,7 +331,7 @@ sub _create_attachment_payload {
         is_patch     => JSON::true,
     };
 
-    $payload->{comment} = $opts{comment} if $opts{comment};
+    $payload->{comment} = decode('UTF-8', $opts{comment}) if $opts{comment};
     return $payload;
 }
 
