@@ -24,7 +24,7 @@ use GitBz::Git;
 use GitBz::RestClient;
 use JSON;
 use Encode;
-use MIME::Base64 qw(encode_base64);
+use MIME::Base64 qw(encode_base64 decode_base64);
 use Cwd;
 
 # Black-box UTF-8 handling regression tests
@@ -70,6 +70,26 @@ subtest 'RestClient _create_attachment_payload handles UTF-8 comments correctly'
     like( $json_payload, qr/"comment":"[^"]*á[^"]*"/, 'Comment contains proper UTF-8 á' );
     unlike( $json_payload, qr/Ã§/, 'Comment does not contain double-encoded ç' );
     unlike( $json_payload, qr/Ã¡/, 'Comment does not contain double-encoded á' );
+};
+
+subtest 'RestClient _create_attachment_payload preserves patch data encoding' => sub {
+    # Create RestClient instance  
+    my $client = GitBz::RestClient->new( https => 1, host => 'https://example.com' );
+    
+    # Test patch data with UTF-8 characters as would come from GitBz::Git->format_patch()
+    my $patch_data = "From: Author\nSubject: Test\n\nCommit message with ç\n\n+Added line with ç";
+    
+    # Test the internal payload creation method
+    my $payload = $client->_create_attachment_payload(
+        123, $patch_data, "test.patch", "Test patch"
+    );
+    
+    # Decode the base64 data to check it wasn't double-encoded
+    my $decoded_data = decode_base64($payload->{data});
+    
+    # Should preserve original UTF-8 encoding (will FAIL if double-encoded)
+    is($decoded_data, $patch_data, 'Patch data is preserved without double-encoding');
+    like($decoded_data, qr/ç/, 'Patch data contains UTF-8 character ç');
 };
 
 done_testing();
