@@ -62,10 +62,8 @@ sub run {
             GitBz::Exception::Git->throw("Git command failed: $stderr");
         }
         if ($stdout) {
-            chomp $stdout;
-
-            # Decode UTF-8 from Git output
-            $stdout = decode( 'UTF-8', $stdout, Encode::FB_CROAK );
+            # Don't chomp format-patch output to preserve exact formatting
+            chomp $stdout unless $command eq 'format-patch';
         }
         return $stdout || '';
     } catch {
