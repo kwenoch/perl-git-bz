@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # This file is part of git-bz.
 #
@@ -16,6 +16,7 @@
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
+
 use Test::More;
 use Test::MockModule;
 use Test::Exception;

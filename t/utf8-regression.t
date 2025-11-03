@@ -16,6 +16,7 @@
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
+
 use Test::More;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";

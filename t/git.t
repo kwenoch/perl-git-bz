@@ -1,3 +1,4 @@
+#!/usr/bin/env perl
 
 # This file is part of git-bz.
 #
@@ -13,7 +14,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
+
 use Modern::Perl;
+
 use Test::More tests => 2;
 use Test::Exception;
 use FindBin;
