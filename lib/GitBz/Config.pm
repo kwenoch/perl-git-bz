@@ -23,8 +23,9 @@ GitBz::Config - Configuration management for git-bz
 
     use GitBz::Config;
     
-    my $config = GitBz::Config->load();
-    my $tracker = $config->{git_config}->{'default-tracker'};
+    my $tracker = GitBz::Config->get_default_tracker();
+    my $path = GitBz::Config->get("bz-tracker.$tracker.path");
+    my $https = GitBz::Config->get_bool("bz-tracker.$tracker.https");
 
 =head1 DESCRIPTION
 
@@ -35,60 +36,35 @@ Provides Koha-specific defaults for Bugzilla integration.
 
 use Modern::Perl;
 
-use Config::Tiny;
-use File::HomeDir;
-
 use GitBz::Git;
 
-my $DEFAULT_CONFIG = {
-    'bugs.koha-community.org' => {
-        https              => 1,
-        'default-priority' => 'Normal',
-        'default-product'  => 'Koha',
-        path               => '/bugzilla3',
-    },
-};
+use constant DEFAULT_TRACKER => 'bugs.koha-community.org';
 
-my $GIT_CONFIG = {
-    'default-tracker' => 'bugs.koha-community.org',
-};
+sub get {
+    my ($class, $name, $default, $type) = @_;
 
-=head2 load
+    $default //= '';
+    my @args;
 
-    my $config = GitBz::Config->load();
+    if ($type) {
+        push @args, "--type=$type";
+    }
+    push @args, "--default=$default";
+    push @args, "--get", $name;
 
-Loads configuration from Git config and merges with defaults.
-Returns a hashref with 'config' and 'git_config' keys.
+    return GitBz::Git->run( 'config', @args );
+}
 
-=cut
+sub get_bool {
+    my ($class, $name) = @_;
 
-sub load {
+    return $class->get( $name, '', 'bool' ) eq 'true';
+}
+
+sub get_default_tracker {
     my ($class) = @_;
 
-    my $config_file = File::HomeDir->my_home . '/.gitconfig';
-    my $config      = -f $config_file ? Config::Tiny->read($config_file) : {};
-
-    # Load git config
-    my $git_config = {};
-    eval {
-        my $git_output = GitBz::Git->run( 'config', '--get-regexp', '^bz\.' );
-        for my $line ( split /\n/, $git_output ) {
-            if ( $line =~ /^bz\.(\S+)\s+(.*)/ ) {
-                $git_config->{$1} = $2;
-            }
-        }
-    };
-
-    # Merge configs
-    my $merged = { %$GIT_CONFIG, %$git_config };
-
-    # Merge tracker defaults
-    for my $tracker ( keys %$DEFAULT_CONFIG ) {
-        $config->{$tracker} //= {};
-        %{ $config->{$tracker} } = ( %{ $DEFAULT_CONFIG->{$tracker} }, %{ $config->{$tracker} } );
-    }
-
-    return { config => $config, git_config => $merged };
+    return $class->get( 'bz.default-tracker', DEFAULT_TRACKER );
 }
 
 1;

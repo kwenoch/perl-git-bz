@@ -57,9 +57,14 @@ Creates a new command dispatcher with configuration and REST client.
 sub new {
     my ( $class, %opts ) = @_;
 
-    my $config         = GitBz::Config->load();
-    my $tracker        = $opts{bugzilla}               || $config->{git_config}->{'default-tracker'};
-    my $tracker_config = $config->{config}->{$tracker} || {};
+    my $default_tracker = GitBz::Config->get_default_tracker();
+    my $tracker         = $opts{bugzilla} || $default_tracker;
+    my $tracker_config  = {
+        path          => GitBz::Config->get("bz-tracker.$tracker.path"),
+        https         => GitBz::Config->get_bool("bz-tracker.$tracker.https"),
+        'bz-user'     => GitBz::Config->get("bz-tracker.$tracker.bz-user"),
+        'bz-password' => GitBz::Config->get("bz-tracker.$tracker.bz-password"),
+    };
 
     my $client = GitBz::RestClient->new(
         host  => $tracker,
@@ -74,12 +79,8 @@ sub new {
 
     # Try git config if env vars not set
     if ( !$username || !$password ) {
-        my $tracker_section = qq{bz-tracker "$tracker"};
-        my $tracker_config  = $config->{config}->{$tracker_section};
-
         # Check if git-credential should be used
-        my $use_git_credential = $tracker_config->{'use-git-credential'}
-            && $tracker_config->{'use-git-credential'} eq 'true';
+        my $use_git_credential = GitBz::Config->get_bool("bz-tracker.$tracker.use-git-credential");
 
         if ($use_git_credential) {
             ( $username, $password ) = $class->_get_git_credentials( $tracker, $tracker_config );
@@ -94,13 +95,12 @@ sub new {
                 };
             }
         } else {
-            $username ||= $tracker_config->{'bz-user'}     if $tracker_config;
-            $password ||= $tracker_config->{'bz-password'} if $tracker_config;
+            $username ||= $tracker_config->{'bz-user'};
+            $password ||= $tracker_config->{'bz-password'};
         }
     }
 
     my $self = bless {
-        config  => $config,
         client  => $client,
         tracker => $tracker,
     }, $class;
