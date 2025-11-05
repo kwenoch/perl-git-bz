@@ -1,9 +1,7 @@
 requires 'Modern::Perl';
 requires 'Try::Tiny';
-requires 'Config::Tiny';
 requires 'IPC::Run3';
 requires 'Getopt::Long';
-requires 'File::HomeDir';
 requires 'File::Temp';
 requires 'MIME::Base64';
 requires 'Exception::Class';

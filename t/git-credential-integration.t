@@ -34,19 +34,17 @@ subtest 'git-credential integration workflow' => sub {
     plan tests => 6;
     
     # Mock config with git-credential enabled
-    $config_mock->mock('load', sub {
-        return {
-            config => {
-                'bz-tracker "bugs.koha-community.org"' => {
-                    'use-git-credential' => 'true',
-                    https => 1,
-                    path => '/bugzilla3'
-                }
-            },
-            git_config => {
-                'default-tracker' => 'bugs.koha-community.org'
-            }
-        };
+    $config_mock->mock('get', sub {
+        my ($class, $name) = @_;
+
+        my %config = (
+            'bz.default-tracker' => 'bugs.koha-community.org',
+            'bz-tracker.bugs.koha-community.org.path' => '/bugzilla3',
+            'bz-tracker.bugs.koha-community.org.https' => 'true',
+            'bz-tracker.bugs.koha-community.org.use-git-credential' => 'true',
+        );
+
+        return $config{$name} // '';
     });
     
     # Mock successful credential retrieval
@@ -90,18 +88,17 @@ subtest 'git-credential failure and rejection' => sub {
     plan tests => 3;
     
     # Mock config with git-credential enabled
-    $config_mock->mock('load', sub {
-        return {
-            config => {
-                'bz-tracker "bugs.koha-community.org"' => {
-                    'use-git-credential' => 'true',
-                    https => 1
-                }
-            },
-            git_config => {
-                'default-tracker' => 'bugs.koha-community.org'
-            }
-        };
+    $config_mock->mock('get', sub {
+        my ($class, $name) = @_;
+
+        my %config = (
+            'bz.default-tracker' => 'bugs.koha-community.org',
+            'bz-tracker.bugs.koha-community.org.path' => '/bugzilla3',
+            'bz-tracker.bugs.koha-community.org.https' => 'true',
+            'bz-tracker.bugs.koha-community.org.use-git-credential' => 'true',
+        );
+
+        return $config{$name} // '';
     });
     
     # Mock credential retrieval and rejection
@@ -143,19 +140,18 @@ subtest 'fallback to stored credentials when git-credential disabled' => sub {
     plan tests => 2;
     
     # Mock config without git-credential
-    $config_mock->mock('load', sub {
-        return {
-            config => {
-                'bz-tracker "bugs.koha-community.org"' => {
-                    'bz-user' => 'stored@example.com',
-                    'bz-password' => 'storedpass',
-                    https => 1
-                }
-            },
-            git_config => {
-                'default-tracker' => 'bugs.koha-community.org'
-            }
-        };
+    $config_mock->mock('get', sub {
+        my ($class, $name) = @_;
+
+        my %config = (
+            'bz.default-tracker' => 'bugs.koha-community.org',
+            'bz-tracker.bugs.koha-community.org.path' => '/bugzilla3',
+            'bz-tracker.bugs.koha-community.org.https' => 'true',
+            'bz-tracker.bugs.koha-community.org.bz-user' => 'stored@example.com',
+            'bz-tracker.bugs.koha-community.org.bz-password' => 'storedpass',
+        );
+
+        return $config{$name} // '';
     });
     
     # Mock RestClient constructor for fallback test

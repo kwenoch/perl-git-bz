@@ -59,7 +59,7 @@ sub run {
     return try {
         run3 \@cmd, \undef, \$stdout, \$stderr;
         if ( $? != 0 ) {
-            GitBz::Exception::Git->throw("Git command failed: $stderr");
+            GitBz::Exception::Git->throw("Git command (@cmd) failed: $stderr");
         }
         if ($stdout) {
             # Don't chomp format-patch output to preserve exact formatting
@@ -88,7 +88,7 @@ sub run_with_input {
     return try {
         run3 \@cmd, \$input, \$stdout, \$stderr;
         if ( $? != 0 ) {
-            GitBz::Exception::Git->throw("Git command failed: $stderr");
+            GitBz::Exception::Git->throw("Git command (@cmd) failed: $stderr");
         }
         if ($stdout) {
             chomp $stdout;

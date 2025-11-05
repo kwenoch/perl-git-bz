@@ -7,10 +7,8 @@ WriteMakefile(
     PREREQ_PM    => {
         'Modern::Perl'     => 0,
         'Try::Tiny'        => 0,
-        'Config::Tiny'     => 0,
         'IPC::Run3'        => 0,
         'Getopt::Long'     => 0,
-        'File::HomeDir'    => 0,
         'File::Temp'       => 0,
         'MIME::Base64'     => 0,
         'Exception::Class' => 0,
