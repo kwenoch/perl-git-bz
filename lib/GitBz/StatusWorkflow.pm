@@ -63,16 +63,17 @@ sub get_next_status_values {
 
     # Koha Bugzilla workflow transitions
     my %transitions = (
-        'NEW'              => [ 'ASSIGNED',         'Needs Signoff', 'RESOLVED' ],
-        'ASSIGNED'         => [ 'Needs Signoff',    'RESOLVED' ],
-        'Needs Signoff'    => [ 'Signed Off',       'Failed QA', 'RESOLVED' ],
-        'Signed Off'       => [ 'Passed QA',        'Failed QA', 'RESOLVED' ],
-        'Failed QA'        => [ 'Needs Signoff',    'RESOLVED' ],
-        'Passed QA'        => [ 'Pushed to Master', 'Pushed to Stable', 'RESOLVED' ],
-        'Pushed to Master' => ['RESOLVED'],
-        'Pushed to Stable' => ['RESOLVED'],
-        'RESOLVED'         => ['REOPENED'],
-        'REOPENED'         => [ 'ASSIGNED', 'Needs Signoff', 'RESOLVED' ],
+        'NEW'                  => [ 'ASSIGNED',         'Needs Signoff', 'RESOLVED' ],
+        'ASSIGNED'             => [ 'Needs Signoff',    'RESOLVED' ],
+        'Needs Signoff'        => [ 'Signed Off',       'Failed QA', 'RESOLVED' ],
+        'Signed Off'           => [ 'Passed QA',        'Failed QA', 'RESOLVED' ],
+        'Failed QA'            => [ 'Needs Signoff',    'RESOLVED' ],
+        'Passed QA'            => [ 'Pushed to Master', 'Pushed to Stable', 'RESOLVED' ],
+        'Pushed to Master'     => ['RESOLVED'],
+        'Pushed to Stable'     => ['RESOLVED'],
+        'RESOLVED'             => ['REOPENED'],
+        'REOPENED'             => [ 'ASSIGNED', 'Needs Signoff', 'RESOLVED' ],
+        'Patch doesn\'t apply' => [ 'ASSIGNED', 'RESOLVED', 'BLOCKED', 'In Discussion', 'Needs Signoff', 'Signed Off', 'Passed QA', 'Failed QA' ],
     );
 
     return $transitions{$current_status} || [];
