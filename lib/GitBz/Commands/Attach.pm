@@ -239,7 +239,7 @@ sub attach_patches {
         %bug_updates    = %$updates_ref   if $updates_ref;
     } else {
         # Non-interactive mode - auto-obsolete matching patches
-        @obsoletes_list = $self->find_trivial_obsoletes( $bug, $commits );
+        @obsoletes_list = $self->find_trivial_obsoletes( $bug, $commits, $opts->{yes} );
     }
 
     for my $commit (@$commits) {
@@ -327,14 +327,15 @@ sub attach_patches {
 
 =head2 find_trivial_obsoletes
 
-    my @obsoletes = $attach->find_trivial_obsoletes($bug, \@commits);
+    my @obsoletes = $attach->find_trivial_obsoletes($bug, \@commits, $auto_yes);
 
 Finds patches that should be automatically obsoleted based on matching commit subjects.
+Auto-obsoletes exact matches, prompts for confirmation on non-matching patches unless --yes is used.
 
 =cut
 
 sub find_trivial_obsoletes {
-    my ( $self, $bug, $commits ) = @_;
+    my ( $self, $bug, $commits, $auto_yes ) = @_;
 
     my $attachments = $bug->attachments;
     return () unless $attachments && @$attachments;
@@ -342,17 +343,44 @@ sub find_trivial_obsoletes {
     # Build list of commit subjects for matching
     my %commit_subjects = map { $_->{subject} => 1 } @$commits;
 
-    my @obsoletes;
+    my @auto_obsoletes;
+    my @manual_obsoletes;
+    
     for my $patch (@$attachments) {
         next unless $patch->{is_patch} && !$patch->{is_obsolete};
         
-        # Auto-obsolete if commit subject matches patch summary
+        # Auto-obsolete if commit subject matches patch summary exactly
         if ( $commit_subjects{ $patch->{summary} } ) {
-            push @obsoletes, $patch->{id};
+            push @auto_obsoletes, $patch->{id};
+        } else {
+            # Potential candidate for manual obsoleting
+            push @manual_obsoletes, $patch;
         }
     }
 
-    return @obsoletes;
+    # Handle manual obsoletes with confirmation (unless --yes flag is used)
+    my @confirmed_obsoletes;
+    if (@manual_obsoletes && !$auto_yes) {
+        for my $patch (@manual_obsoletes) {
+            print "Patch attachment found: $patch->{id} - $patch->{summary}\n";
+            print "This doesn't match any new commit. What would you like to do?\n";
+            print "(o)bsolete, (s)kip, (c)ancel: ";
+            
+            my $choice = <STDIN>;
+            chomp $choice;
+            $choice = lc($choice);
+            
+            if ($choice eq 'o' || $choice eq 'obsolete') {
+                push @confirmed_obsoletes, $patch->{id};
+            } elsif ($choice eq 'c' || $choice eq 'cancel') {
+                print "Operation cancelled.\n";
+                exit 1;
+            }
+            # 's' or 'skip' - do nothing, continue to next patch
+        }
+    }
+
+    return (@auto_obsoletes, @confirmed_obsoletes);
 }
 
 =head2 edit_bug_updates
