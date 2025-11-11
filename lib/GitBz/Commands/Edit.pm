@@ -426,6 +426,10 @@ sub update_bug {
         }
     }
 
+    if ($changed) {
+        print "\n✓ Successfully updated bug $bug_ref\n";
+    }
+
     return $changed;
 }
 
