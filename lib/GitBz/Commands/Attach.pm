@@ -237,6 +237,9 @@ sub attach_patches {
         ( my $bug_comment, my $obsoletes_ref, my $updates_ref ) = $self->edit_bug_updates( $bug, $commits );
         @obsoletes_list = @$obsoletes_ref if $obsoletes_ref;
         %bug_updates    = %$updates_ref   if $updates_ref;
+    } else {
+        # Non-interactive mode - auto-obsolete matching patches
+        @obsoletes_list = $self->find_trivial_obsoletes( $bug, $commits );
     }
 
     for my $commit (@$commits) {
@@ -320,6 +323,36 @@ sub attach_patches {
     }
 
     # Obsoletes are now handled in the unified update section above
+}
+
+=head2 find_trivial_obsoletes
+
+    my @obsoletes = $attach->find_trivial_obsoletes($bug, \@commits);
+
+Finds patches that should be automatically obsoleted based on matching commit subjects.
+
+=cut
+
+sub find_trivial_obsoletes {
+    my ( $self, $bug, $commits ) = @_;
+
+    my $attachments = $bug->attachments;
+    return () unless $attachments && @$attachments;
+
+    # Build list of commit subjects for matching
+    my %commit_subjects = map { $_->{subject} => 1 } @$commits;
+
+    my @obsoletes;
+    for my $patch (@$attachments) {
+        next unless $patch->{is_patch} && !$patch->{is_obsolete};
+        
+        # Auto-obsolete if commit subject matches patch summary
+        if ( $commit_subjects{ $patch->{summary} } ) {
+            push @obsoletes, $patch->{id};
+        }
+    }
+
+    return @obsoletes;
 }
 
 =head2 edit_bug_updates
