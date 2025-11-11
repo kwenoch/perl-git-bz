@@ -44,6 +44,7 @@ my %COMMANDS = (
     apply  => 'GitBz::Commands::Apply',
     attach => 'GitBz::Commands::Attach',
     edit   => 'GitBz::Commands::Edit',
+    open   => 'GitBz::Commands::Open',
 );
 
 =head2 new
@@ -235,7 +236,7 @@ sub dispatch {
     my $command = shift @args || '';
 
     if ( !$command || !$COMMANDS{$command} ) {
-        print STDERR "Usage: git bz [apply|attach|edit] [options]\n";
+        print STDERR "Usage: git bz [apply|attach|edit|open] [options]\n";
         exit 1;
     }
 

@@ -24,6 +24,7 @@ git-bz - Git integration with Bugzilla for Koha development
     git bz apply [options] <bug-ref>
     git bz attach [options] [<bug-ref>] <commit-range>
     git bz edit [options] (<bug-ref> | <commit> | <revision-range>)
+    git bz open <bug-ref>
 
 =head1 DESCRIPTION
 
@@ -45,6 +46,10 @@ Attach Git commits as patches to a Bugzilla bug.
 =item B<edit>
 
 Edit bug details and add comments through an interactive editor.
+
+=item B<open>
+
+Open bug in default web browser.
 
 =back
 

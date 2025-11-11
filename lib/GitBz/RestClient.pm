@@ -335,4 +335,22 @@ sub _create_attachment_payload {
     return $payload;
 }
 
+=head2 get_bug_url
+
+    my $url = $client->get_bug_url($bug_id);
+
+Returns the web URL for viewing a bug in the browser.
+
+=cut
+
+sub get_bug_url {
+    my ( $self, $bug_id ) = @_;
+    
+    # Convert REST URL to web URL
+    my $web_url = $self->{base_url};
+    $web_url =~ s|/rest$||;  # Remove /rest suffix
+    
+    return "$web_url/show_bug.cgi?id=$bug_id";
+}
+
 1;

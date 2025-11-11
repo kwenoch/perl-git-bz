@@ -131,3 +131,4 @@ This ensures patches are applied in the correct dependency order automatically.
 - `apply` - Apply patches from a bug with dependency resolution ✅
 - `attach` - Attach commits as patches to a bug ✅  
 - `edit` - Edit bug details and add comments ✅
+- `open` - Open bug in default web browser ✅
