@@ -13,5 +13,6 @@ on 'test' => sub {
     requires 'Test::Exception';
     requires 'Test::MockModule';
     requires 'Test::Warn';
+    requires 'Test::Output';
     requires 'TAP::Harness::JUnit';
 };
