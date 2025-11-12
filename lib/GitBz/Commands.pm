@@ -38,6 +38,7 @@ use Try::Tiny qw(catch try);
 
 use GitBz::Exception;
 use GitBz::Config;
+use GitBz::Credentials;
 use GitBz::RestClient;
 
 my %COMMANDS = (
@@ -73,37 +74,17 @@ sub new {
         path  => $tracker_config->{path} || '',
     );
 
-    # Auto-login if credentials available
-    my $username = $ENV{BUGZILLA_USER};
-    my $password = $ENV{BUGZILLA_PASSWORD};
-    my $git_credential_info;
-
-    # Try git config if env vars not set
-    if ( !$username || !$password ) {
-        # Check if git-credential should be used
-        my $use_git_credential = GitBz::Config->get_bool("bz-tracker.$tracker.use-git-credential");
-
-        if ($use_git_credential) {
-            ( $username, $password ) = $class->_get_git_credentials( $tracker, $tracker_config );
-
-            # Store credential info for later approval/rejection
-            if ( $username && $password ) {
-                $git_credential_info = {
-                    tracker        => $tracker,
-                    tracker_config => $tracker_config,
-                    username       => $username,
-                    password       => $password,
-                };
-            }
-        } else {
-            $username ||= $tracker_config->{'bz-user'};
-            $password ||= $tracker_config->{'bz-password'};
-        }
-    }
+    # Get credentials using new Credentials class
+    my $credentials = GitBz::Credentials->new(
+        tracker        => $tracker,
+        tracker_config => $tracker_config
+    );
+    my ($username, $password, $git_credential_info) = $credentials->get_credentials();
 
     my $self = bless {
-        client  => $client,
-        tracker => $tracker,
+        client      => $client,
+        tracker     => $tracker,
+        credentials => $credentials,
     }, $class;
 
     if ( $username && $password ) {
@@ -112,14 +93,14 @@ sub new {
 
             # Approve git credential on successful login
             if ($git_credential_info) {
-                $class->_approve_git_credential($git_credential_info);
+                $credentials->approve_git_credential($git_credential_info);
             }
         };
         if ($@) {
 
             # Reject git credential on failed login
             if ($git_credential_info) {
-                $class->_reject_git_credential($git_credential_info);
+                $credentials->reject_git_credential($git_credential_info);
             }
             die $@;
         }
