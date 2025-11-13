@@ -94,9 +94,11 @@ sub execute {
         # Reset applied bugs tracking for new apply session
         @bugs_applied = ();
 
-        $self->apply_bug_with_dependencies( $bug_ref, \%opts );
+        my $patches_applied = $self->apply_bug_with_dependencies( $bug_ref, \%opts );
 
-        print "\n✓ Successfully applied patches from bug $bug_ref\n";
+        if ($patches_applied) {
+            print "\n✓ Successfully applied $patches_applied patch(es) from bug $bug_ref\n";
+        }
     } catch {
         GitBz::Exception->throw("Apply failed: $_");
     };
@@ -154,10 +156,14 @@ sub apply_bug_with_dependencies {
     }
 
     # Apply the main bug
-    $self->apply_bug_patches( $bug_ref, $opts );
+    my $patches_applied = $self->apply_bug_patches( $bug_ref, $opts );
 
-    # Track as applied
-    push @bugs_applied, $bug_ref;
+    # Track as applied only if patches were actually applied
+    if ($patches_applied) {
+        push @bugs_applied, $bug_ref;
+    }
+
+    return $patches_applied;
 }
 
 =head2 handle_git_am_state
@@ -223,7 +229,8 @@ sub apply_bug_patches {
         my $choice = $self->prompt_multi( "Apply? [(y)es, (n)o, (i)nteractive]", [ "y", "n", "i" ] );
 
         if ( $choice eq "n" ) {
-            return;
+            print "\nNo patches applied for bug $bug_ref\n";
+            return 0;
         } elsif ( $choice eq "i" ) {
             @selected_patches = $self->select_patches_interactively( \@patches, $bug );
         } else {
@@ -231,9 +238,13 @@ sub apply_bug_patches {
         }
     }
 
-    return unless @selected_patches;
+    unless (@selected_patches) {
+        print "\nNo patches selected for bug $bug_ref\n";
+        return 0;
+    }
 
     $self->apply_patches( \@selected_patches, $opts );
+    return scalar @selected_patches;
 }
 
 =head2 prompt_multi
