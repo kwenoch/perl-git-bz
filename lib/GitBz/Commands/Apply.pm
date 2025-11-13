@@ -299,7 +299,7 @@ sub select_patches_interactively {
         chomp $line;
         next if $line =~ /^\s*#/ || $line =~ /^\s*$/;
 
-        if ( $line =~ /^(\d+)/ ) {
+        if ( $line =~ /^\s*(\d+)/ ) {
             my $patch_id = $1;
             if ( $patches_by_id{$patch_id} ) {
                 push @selected, $patches_by_id{$patch_id};
