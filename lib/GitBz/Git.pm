@@ -62,6 +62,7 @@ sub run {
             GitBz::Exception::Git->throw("Git command (@cmd) failed: $stderr");
         }
         if ($stdout) {
+
             # Don't chomp format-patch output to preserve exact formatting
             chomp $stdout unless $command eq 'format-patch';
         }
@@ -92,8 +93,9 @@ sub run_with_input {
         }
         if ($stdout) {
             chomp $stdout;
+
             # Decode UTF-8 from Git output
-            $stdout = decode('UTF-8', $stdout, Encode::FB_CROAK);
+            $stdout = decode( 'UTF-8', $stdout, Encode::FB_CROAK );
         }
         return $stdout || '';
     } catch {
@@ -101,23 +103,49 @@ sub run_with_input {
     };
 }
 
-=head2 rev_list
+=head2 get_commits
 
-    my @commits = GitBz::Git->rev_list(@args);
+    my @commits = GitBz::Git->get_commits($range);
+
+Parses a commit range and returns commit information.
+Handles both single commits and ranges correctly.
 
 Runs git rev-list and returns an array of commit hashrefs with 'id' and 'subject' keys.
 
 =cut
 
-sub rev_list {
-    my ( $class, @args ) = @_;
+sub get_commits {
+    my ( $class, $range ) = @_;
 
-    unshift( @args, '--pretty=format:%s' );
-    unshift( @args, '--reverse' );            # Add --reverse to get chronological order (oldest first)
-    unshift( @args, '--max-count=1' )
-        if $args[2] eq 'HEAD';                # Adjust index due to --reverse insertion
+    $range =~ s/^\s+|\s+$//g;
 
-    my $output = $class->run( 'rev-list', @args );
+    my ( $from, $to );
+
+    if ( $range !~ /\.\./ ) {
+        $from = "$range~";
+        $to   = $range;
+    } else {
+
+        # Parse FROM..TO
+        ( $from, $to ) = split /\.\./, $range, 2;
+    }
+
+    # Default "FROM.." to FROM..HEAD
+    $to = 'HEAD' if $to eq '';
+
+    $from = undef if $from eq '';
+
+    GitBz::Exception::Git->throw("Cannot find a starting commit for range ($range)")
+        unless $from;
+
+    $range = $from ? "$from..$to" : $to;
+
+    my $output = $class->run(
+        'rev-list',
+        $range,
+        '--pretty=format:%s',
+        '--reverse',    # Add --reverse to get chronological order (oldest first)
+    );
 
     my @commits;
     my @lines = split /\n/, $output;
@@ -129,7 +157,11 @@ sub rev_list {
         push @commits, { id => $id, subject => $subject };
     }
 
+    GitBz::Exception::Git->throw("No commit found for this range ($range)")
+        unless @commits;
+
     return @commits;
+
 }
 
 =head2 format_patch
@@ -143,36 +175,6 @@ Generates a patch for the given commit range.
 sub format_patch {
     my ( $class, $range ) = @_;
     return $class->run( 'format-patch', '--stdout', '-M', $range );
-}
-
-=head2 get_commits
-
-    my @commits = GitBz::Git->get_commits($range);
-
-Parses a commit range and returns commit information.
-Handles both single commits and ranges correctly.
-
-=cut
-
-sub get_commits {
-    my ( $class, $range ) = @_;
-
-    # Try as single commit first - exactly like original git-bz
-    my $rev = try {
-        $class->run( 'rev-parse', $range, '--verify' );
-    } catch {
-        undef
-    };
-
-    if ($rev) {
-
-        # Single commit - return just that one commit
-        return $class->rev_list( '--max-count=1', $rev );
-    } else {
-
-        # Not a single commit, treat as range
-        return $class->rev_list($range);
-    }
 }
 
 1;

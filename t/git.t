@@ -17,7 +17,7 @@
 
 use Modern::Perl;
 
-use Test::More tests => 2;
+use Test::More tests => 3;
 use Test::Exception;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
@@ -34,4 +34,59 @@ subtest 'run() tests' => sub {
 
     my $result = GitBz::Git->run( 'rev-parse', 'HEAD' );
     like( $result, qr/^[a-f0-9]{40}$/, 'Returns commit hash' );
+};
+
+subtest 'get_commits() tests' => sub {
+
+    plan tests => 12;
+
+    my @commits = GitBz::Git->get_commits("HEAD");
+    is( scalar(@commits), 1 );
+
+    @commits = GitBz::Git->get_commits("HEAD~1");
+    is( scalar(@commits), 1 );
+
+    @commits = GitBz::Git->get_commits("HEAD~1");
+    is( scalar(@commits), 1 );
+
+    @commits = GitBz::Git->get_commits("HEAD~3..HEAD");
+    is( scalar(@commits), 3 );
+
+    @commits = GitBz::Git->get_commits("HEAD~3..");
+    is( scalar(@commits), 3 );
+
+    @commits = GitBz::Git->get_commits("HEAD~3..HEAD~1");
+    is( scalar(@commits), 2 );
+
+    throws_ok {
+        @commits = GitBz::Git->get_commits("HEAD..HEAD");
+    }
+    "GitBz::Exception::Git";
+
+    throws_ok {
+        @commits = GitBz::Git->get_commits("..HEAD");
+        is( scalar(@commits), 0 );
+    }
+    "GitBz::Exception::Git";
+
+    @commits = GitBz::Git->get_commits("97e231b0c71938f2ff7ca16fec4bb1cec16c0abd");
+    is_deeply(
+        \@commits,
+        [ { subject => q{[#14] Fix inconsistent shebang}, id => q{97e231b0c71938f2ff7ca16fec4bb1cec16c0abd} } ]
+    );
+
+    @commits = GitBz::Git->get_commits("97e231b");
+    is_deeply(
+        \@commits,
+        [ { subject => q{[#14] Fix inconsistent shebang}, id => q{97e231b0c71938f2ff7ca16fec4bb1cec16c0abd} } ]
+    );
+
+    # reverse order
+    @commits = GitBz::Git->get_commits("HEAD~3..");
+    my $HEAD = qx{git rev-parse HEAD};
+    chomp $HEAD;
+    is( $commits[2]->{id}, $HEAD );
+    my $HEAD2 = qx{git rev-parse HEAD~2};
+    chomp $HEAD2;
+    is( $commits[0]->{id}, $HEAD2 );
 };
