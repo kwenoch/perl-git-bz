@@ -9,6 +9,7 @@ requires 'JSON';
 requires 'LWP::UserAgent';
 
 on 'test' => sub {
+    requires 'IO::String';
     requires 'Test::More';
     requires 'Test::Exception';
     requires 'Test::MockModule';
