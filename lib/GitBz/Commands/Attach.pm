@@ -238,6 +238,7 @@ sub attach_patches {
         @obsoletes_list = @$obsoletes_ref if $obsoletes_ref;
         %bug_updates    = %$updates_ref   if $updates_ref;
     } else {
+
         # Non-interactive mode - auto-obsolete matching patches
         @obsoletes_list = $self->find_trivial_obsoletes( $bug, $commits, $opts->{yes} );
     }
@@ -345,14 +346,15 @@ sub find_trivial_obsoletes {
 
     my @auto_obsoletes;
     my @manual_obsoletes;
-    
+
     for my $patch (@$attachments) {
         next unless $patch->{is_patch} && !$patch->{is_obsolete};
-        
+
         # Auto-obsolete if commit subject matches patch summary exactly
         if ( $commit_subjects{ $patch->{summary} } ) {
             push @auto_obsoletes, $patch->{id};
         } else {
+
             # Potential candidate for manual obsoleting
             push @manual_obsoletes, $patch;
         }
@@ -360,27 +362,27 @@ sub find_trivial_obsoletes {
 
     # Handle manual obsoletes with confirmation (unless --yes flag is used)
     my @confirmed_obsoletes;
-    if (@manual_obsoletes && !$auto_yes) {
+    if ( @manual_obsoletes && !$auto_yes ) {
         for my $patch (@manual_obsoletes) {
             print "Patch attachment found: $patch->{id} - $patch->{summary}\n";
             print "This doesn't match any new commit. What would you like to do?\n";
             print "(o)bsolete, (s)kip, (c)ancel: ";
-            
+
             my $choice = <STDIN>;
             chomp $choice;
             $choice = lc($choice);
-            
-            if ($choice eq 'o' || $choice eq 'obsolete') {
+
+            if ( $choice eq 'o' || $choice eq 'obsolete' ) {
                 push @confirmed_obsoletes, $patch->{id};
-            } elsif ($choice eq 'c' || $choice eq 'cancel') {
-                print "Operation cancelled.\n";
-                exit 1;
+            } elsif ( $choice eq 'c' || $choice eq 'cancel' ) {
+                GitBz::Exception->throw("Operation cancelled by user\n");
             }
+
             # 's' or 'skip' - do nothing, continue to next patch
         }
     }
 
-    return (@auto_obsoletes, @confirmed_obsoletes);
+    return ( @auto_obsoletes, @confirmed_obsoletes );
 }
 
 =head2 edit_bug_updates
