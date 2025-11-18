@@ -2,8 +2,13 @@ package GitBz::Progress;
 
 use Modern::Perl '2023';
 use Term::ANSIColor qw(colored);
+use Time::HiRes     qw(usleep);
+use POSIX ":sys_wait_h";
 
 our $VERSION = '0.1.0';
+
+# Spinner characters for animation (braille dots pattern)
+our @SPINNER_CHARS = qw(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏);
 
 =head1 NAME
 
@@ -13,30 +18,37 @@ GitBz::Progress - Progress indicators and feedback for GitBz
 
     use GitBz::Progress;
 
-    # Show progress during a long operation
+    # Show animated spinner during a long operation
     my $spinner = GitBz::Progress::start_spinner("Fetching bug data");
     # ... do work ...
     GitBz::Progress::stop_spinner($spinner, "success");  # or "error"
 
+    # Automatic spinner with code block
+    my $result = GitBz::Progress::with_spinner("Fetching bug", sub {
+        # ... do work ...
+        return $data;
+    });
+
     # Show real-time progress
     GitBz::Progress::print_success("Attached patch successfully");
     GitBz::Progress::print_error("Failed to upload");
-    GitBz::Progress::print_info("Processing...");
 
 =head1 DESCRIPTION
 
-Provides consistent progress indicators and colored output for GitBz commands.
-Works with both terminal and non-terminal output.
+Provides consistent progress indicators with animated spinners and colored
+output for GitBz commands. Uses fork-based spinners to animate during
+blocking operations.
 
 =cut
 
 =head2 start_spinner
 
-Start a progress indicator with a message.
+Start an animated spinner with a message.
 
     my $spinner = GitBz::Progress::start_spinner("Loading...");
 
 Returns a spinner object that should be passed to stop_spinner().
+The spinner runs in a background process and animates automatically.
 
 =cut
 
@@ -46,25 +58,59 @@ sub start_spinner {
     # Check if output is to a terminal
     my $is_tty = -t STDOUT;
 
-    if ($is_tty) {
-        # Print message without newline for terminal
-        print colored(['cyan'], "$message...");
-        STDOUT->flush();
-    } else {
-        # For non-TTY, print with ellipsis
+    if ( !$is_tty ) {
+
+        # For non-TTY, just print message
         print "$message...";
+        return {
+            message => $message,
+            is_tty  => 0,
+        };
     }
 
+    # Fork a process to animate the spinner
+    my $pid = fork();
+
+    if ( !defined $pid ) {
+
+        # Fork failed, fall back to simple message
+        print colored( ['cyan'], "$message..." );
+        STDOUT->flush();
+        return {
+            message => $message,
+            is_tty  => 1,
+            pid     => undef,
+        };
+    }
+
+    if ( $pid == 0 ) {
+
+        # Child process - animate the spinner
+        my $frame = 0;
+        while (1) {
+            my $spinner_char = $SPINNER_CHARS[ $frame % @SPINNER_CHARS ];
+            print "\r" . "  " . colored( ['cyan'], $spinner_char ) . " $message...";
+            STDOUT->flush();
+            usleep(80_000);    # 80ms between frames
+            $frame++;
+        }
+
+        # Never reaches here, parent will kill us
+        exit 0;
+    }
+
+    # Parent process - return spinner info
     return {
-        message => $message,
-        is_tty => $is_tty,
+        message    => $message,
+        is_tty     => $is_tty,
+        pid        => $pid,
         start_time => time(),
     };
 }
 
 =head2 stop_spinner
 
-Stop a progress indicator and show completion status.
+Stop an animated spinner and show completion status.
 
     GitBz::Progress::stop_spinner($spinner, "success");
     GitBz::Progress::stop_spinner($spinner, "error", "Connection failed");
@@ -76,28 +122,34 @@ Third parameter (optional): custom message
 =cut
 
 sub stop_spinner {
-    my ($spinner_obj, $status, $custom_message) = @_;
+    my ( $spinner_obj, $status, $custom_message ) = @_;
 
     my $message = $custom_message || $spinner_obj->{message};
 
+    # Kill the spinner process if it exists
+    if ( $spinner_obj->{pid} ) {
+        kill 'TERM', $spinner_obj->{pid};
+        waitpid( $spinner_obj->{pid}, 0 );
+    }
+
     if ( !$spinner_obj->{is_tty} ) {
+
         # Not a terminal, just print status
         if ( $status eq 'success' ) {
-            print " " . colored(['green'], '✓') . "\n";
+            print " " . colored( ['green'], '✓' ) . "\n";
         } else {
-            print " " . colored(['red'], '✗') . "\n";
+            print " " . colored( ['red'], '✗' ) . "\n";
         }
         return;
     }
 
     # For terminal: clear the line and print final status
-    # Move to beginning of line, clear to end, then print result
     print "\r\e[K";
 
     if ( $status eq 'success' ) {
-        print colored(['green'], '  ✓ ') . "$message\n";
+        print colored( ['green'], '  ✓ ' ) . "$message\n";
     } else {
-        print colored(['red'], '  ✗ ') . "$message\n";
+        print colored( ['red'], '  ✗ ' ) . "$message\n";
     }
 }
 
@@ -111,7 +163,7 @@ Print a success message with a green checkmark.
 
 sub print_success {
     my ($message) = @_;
-    print colored(['green'], '  ✓ ') . "$message\n";
+    print colored( ['green'], '  ✓ ' ) . "$message\n";
 }
 
 =head2 print_error
@@ -124,7 +176,7 @@ Print an error message with a red X.
 
 sub print_error {
     my ($message) = @_;
-    print colored(['red'], '  ✗ ') . "$message\n";
+    print colored( ['red'], '  ✗ ' ) . "$message\n";
 }
 
 =head2 print_info
@@ -137,7 +189,7 @@ Print an informational message.
 
 sub print_info {
     my ($message) = @_;
-    print colored(['blue'], '  ℹ ') . "$message\n";
+    print colored( ['blue'], '  ℹ ' ) . "$message\n";
 }
 
 =head2 print_warning
@@ -150,7 +202,7 @@ Print a warning message with a yellow warning symbol.
 
 sub print_warning {
     my ($message) = @_;
-    print colored(['yellow'], '  ⚠ ') . "$message\n";
+    print colored( ['yellow'], '  ⚠ ' ) . "$message\n";
 }
 
 =head2 progress_counter
@@ -163,17 +215,17 @@ Format a progress counter string.
 =cut
 
 sub progress_counter {
-    my ($current, $total) = @_;
-    return colored(['cyan'], sprintf("[%d/%d]", $current, $total));
+    my ( $current, $total ) = @_;
+    return colored( ['cyan'], sprintf( "[%d/%d]", $current, $total ) );
 }
 
 =head2 with_spinner
 
-Execute a code block with a progress indicator.
+Execute a code block with an animated spinner.
 
-    GitBz::Progress::with_spinner("Fetching bug", sub {
+    my $result = GitBz::Progress::with_spinner("Fetching bug", sub {
         # ... do work ...
-        return 1;  # success
+        return $data;
     });
 
 Returns the return value from the code block.
@@ -183,7 +235,7 @@ and the exception is re-thrown.
 =cut
 
 sub with_spinner {
-    my ($message, $code) = @_;
+    my ( $message, $code ) = @_;
 
     my $spinner = start_spinner($message);
 
@@ -195,11 +247,11 @@ sub with_spinner {
 
     if ($@) {
         my $error = $@;
-        stop_spinner($spinner, 'error');
+        stop_spinner( $spinner, 'error' );
         die $error;
     }
 
-    stop_spinner($spinner, 'success');
+    stop_spinner( $spinner, 'success' );
     return $result;
 }
 
@@ -209,7 +261,7 @@ __END__
 
 =head1 AUTHOR
 
-GitBz Contributors
+Martin Renvoize
 
 =head1 LICENSE
 
