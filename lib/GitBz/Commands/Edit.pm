@@ -43,6 +43,7 @@ use GitBz::Git;
 use GitBz::Exception;
 use GitBz::StatusWorkflow;
 use GitBz::Bug;
+use GitBz::Progress;
 
 =head2 new
 
@@ -116,7 +117,9 @@ sub edit_bug {
     my ( $self, $bug_ref, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = GitBz::Bug->get( $client, $bug_ref );
+    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+        return GitBz::Bug->get( $client, $bug_ref );
+    });
 
     my $template = $self->create_bug_template( $bug, $opts );
     my $edited   = $self->edit_template($template);
@@ -169,7 +172,9 @@ sub edit_bug_with_commits {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = GitBz::Bug->get( $client, $bug_ref );
+    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+        return GitBz::Bug->get( $client, $bug_ref );
+    });
 
     my $template = $self->create_bug_template_with_commits( $bug, $commits, $opts );
     my $edited   = $self->edit_template($template);
@@ -193,7 +198,9 @@ sub create_bug_template {
     $template .= "# Bug " . $bug->id . " - " . $bug->summary . "\n\n";
 
     # Show existing patches for obsoleting
-    my $attachments = $bug->attachments;
+    my $attachments = GitBz::Progress::with_spinner( "Fetching attachments", sub {
+        return $bug->attachments;
+    });
     if ( $attachments && @$attachments ) {
         for my $patch (@$attachments) {
             next unless $patch->{is_patch} && !$patch->{is_obsolete};
@@ -214,7 +221,9 @@ sub create_bug_template {
     # Add patch complexity options
     my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
-    my $complexity_values = $client->get_field_values('cf_patch_complexity');
+    my $complexity_values = GitBz::Progress::with_spinner( "Fetching field values", sub {
+        return $client->get_field_values('cf_patch_complexity');
+    });
     if ($complexity_values) {
         for my $comp (@$complexity_values) {
             $template .= "# Patch-complexity: $comp\n";
@@ -341,7 +350,9 @@ sub update_bug {
     return 0 unless %update_params || $comment || @obsoletes;
 
     # Only fetch bug data if we have changes to process
-    my $bug     = GitBz::Bug->get( $client, $bug_ref );
+    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+        return GitBz::Bug->get( $client, $bug_ref );
+    });
     my $changed = 0;
 
     # Check if there are actual changes before making API call
@@ -409,19 +420,24 @@ sub update_bug {
             }
         }
 
+        my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
         $bug->update(%actual_changes);
+        GitBz::Progress::stop_spinner($spinner, 'success', "Bug fields updated");
         $changed = 1;
     }
 
     # Handle obsoleting attachments
     if (@obsoletes) {
-        my $attachments   = $bug->attachments;
+        my $attachments = GitBz::Progress::with_spinner( "Fetching attachments", sub {
+            return $bug->attachments;
+        });
         my %attach_lookup = map { $_->{id} => $_->{summary} } @$attachments;
 
         for my $attach_id (@obsoletes) {
-            $bug->obsolete_attachment($attach_id);
             my $summary = $attach_lookup{$attach_id} || "Unknown";
-            print "  ✓ Obsoleted attachment $attach_id - $summary\n";
+            my $spinner = GitBz::Progress::start_spinner("Obsoleting attachment $attach_id");
+            $bug->obsolete_attachment($attach_id);
+            GitBz::Progress::stop_spinner($spinner, 'success', "Obsoleted: $summary");
             $changed = 1;
         }
     }

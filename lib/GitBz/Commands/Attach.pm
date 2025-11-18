@@ -43,6 +43,7 @@ use GitBz::Git;
 use GitBz::Exception;
 use GitBz::StatusWorkflow;
 use GitBz::Bug;
+use GitBz::Progress;
 
 =head2 new
 
@@ -333,7 +334,11 @@ sub attach_patches {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
     my $client = $self->{client};
-    my $bug    = GitBz::Bug->get( $client, $bug_ref );
+
+    # Fetch bug with spinner
+    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+        return GitBz::Bug->get( $client, $bug_ref );
+    });
 
     # Preflight checks
     $self->preflight_checks( $bug_ref, $commits );
@@ -358,15 +363,30 @@ sub attach_patches {
         @obsoletes_list = $self->find_trivial_obsoletes( $bug, $commits, $opts->{yes} );
     }
 
+    # Show progress header
+    print "\nUploading " . scalar(@$commits) . " patch(es):\n";
+
+    my $patch_num    = 0;
+    my $total_patches = scalar(@$commits);
+
     for my $commit (@$commits) {
-        my $patch       = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
+        $patch_num++;
         my $filename    = sprintf( "%s.patch", substr( $commit->{id}, 0, 7 ) );
         my $description = $commit->{subject};
-        my $body        = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
-        my $comment     = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
 
-        # Always use commit message as attachment comment
-        # Edit mode only affects bug-level updates, not attachment comments
+        # Show progress counter
+        my $counter = GitBz::Progress::progress_counter($patch_num, $total_patches);
+
+        # Generate patch with spinner
+        my $spinner = GitBz::Progress::start_spinner("$counter Generating $filename");
+        my $patch = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
+        my $body  = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
+        GitBz::Progress::stop_spinner($spinner, 'success');
+
+        my $comment = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
+
+        # Upload patch with spinner
+        $spinner = GitBz::Progress::start_spinner("$counter Uploading: $description");
 
         eval {
             $bug->add_attachment(
@@ -378,25 +398,20 @@ sub attach_patches {
         };
 
         if ($@) {
-            print "✗ Failed to attach: $description\n";
-            print "Error: $@\n";
+            GitBz::Progress::stop_spinner($spinner, 'error');
+            GitBz::Progress::print_error("Failed to attach: $description");
+            print "    Error: $@\n";
             return;    # Skip remaining steps
         }
 
-        # Store attachment info for later display
-        push @{ $self->{_attached} }, $description;
+        GitBz::Progress::stop_spinner($spinner, 'success', "Attached: $description");
     }
 
-    # Show all updates together
-    if ( %bug_updates || @obsoletes_list || $self->{_attached} ) {
-        print "\nUpdating bug $bug_ref:\n";
+    # Show bug field updates and obsoletes
+    if ( %bug_updates || @obsoletes_list ) {
+        print "\nApplying bug updates:\n";
 
-        # Show attachments
-        for my $desc ( @{ $self->{_attached} || [] } ) {
-            print "  ✓ Attached: $desc\n";
-        }
-
-        # Show bug field updates
+        # Show bug field updates (for informational purposes)
         if ( $bug_updates{status} && $bug_updates{status} ne $bug->status ) {
             print "  ✓ Status: " . $bug->status . " → $bug_updates{status}\n";
         }
@@ -431,22 +446,24 @@ sub attach_patches {
             }
         }
 
-        # Show obsoleted attachments
-        for my $attach_id (@obsoletes_list) {
+        # Perform updates with spinner
+        if (%bug_updates) {
+            my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
+            $bug->update(%bug_updates);
+            GitBz::Progress::stop_spinner($spinner, 'success', "Bug fields updated");
+        }
+
+        # Perform obsoletes with real-time feedback
+        if (@obsoletes_list) {
             my $attachments   = $bug->attachments;
             my %attach_lookup = map { $_->{id} => $_->{summary} } @$attachments;
-            my $summary       = $attach_lookup{$attach_id} || "Unknown";
-            print "  ✓ Obsoleted attachment $attach_id - $summary\n";
-        }
 
-        # Perform updates
-        if (%bug_updates) {
-            $bug->update(%bug_updates);
-        }
-
-        # Perform obsoletes
-        for my $attach_id (@obsoletes_list) {
-            $bug->obsolete_attachment($attach_id);
+            for my $attach_id (@obsoletes_list) {
+                my $summary = $attach_lookup{$attach_id} || "Unknown";
+                my $spinner = GitBz::Progress::start_spinner("Obsoleting attachment $attach_id");
+                $bug->obsolete_attachment($attach_id);
+                GitBz::Progress::stop_spinner($spinner, 'success', "Obsoleted: $summary");
+            }
         }
     }
 
@@ -550,7 +567,9 @@ sub edit_bug_updates {
     $template .= "# Add optional bug comment below (leave empty for no comment):\n\n\n";
 
     # Show existing patches for obsoleting
-    my $attachments = $bug->attachments;
+    my $attachments = GitBz::Progress::with_spinner( "Fetching attachments", sub {
+        return $bug->attachments;
+    });
     if ( $attachments && @$attachments ) {
 
         # Build list of commit subjects for matching
@@ -578,7 +597,9 @@ sub edit_bug_updates {
     # Add patch complexity options
     my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
-    my $complexity_values = $client->get_field_values('cf_patch_complexity');
+    my $complexity_values = GitBz::Progress::with_spinner( "Fetching field values", sub {
+        return $client->get_field_values('cf_patch_complexity');
+    });
     if ($complexity_values) {
         for my $comp (@$complexity_values) {
             $template .= "# Patch-complexity: $comp\n";

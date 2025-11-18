@@ -40,6 +40,7 @@ use Try::Tiny    qw(catch try);
 use GitBz::Git;
 use GitBz::Bug;
 use GitBz::Exception;
+use GitBz::Progress;
 use File::Temp;
 use File::Path qw(rmtree);
 use MIME::Base64;
@@ -96,10 +97,6 @@ sub execute {
         @bugs_applied = ();
 
         my $patches_applied = $self->apply_bug_with_dependencies( $bug_ref, \%opts );
-
-        if ($patches_applied) {
-            print "\n✓ Successfully applied $patches_applied patch(es) from bug $bug_ref\n";
-        }
     } catch {
         GitBz::Exception->throw("Apply failed: $_");
     };
@@ -120,7 +117,9 @@ sub apply_bug_with_dependencies {
     return if grep { $_ eq $bug_ref } @bugs_applied;
 
     my $client = $self->{commands}->{client};
-    my $bug    = GitBz::Bug->get( $client, $bug_ref );
+    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+        return GitBz::Bug->get( $client, $bug_ref );
+    });
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
@@ -130,8 +129,10 @@ sub apply_bug_with_dependencies {
         for my $dep_id (@$dependencies) {
             next if grep { $_ eq $dep_id } @bugs_applied;
 
-            my $dep_bug = GitBz::Bug->get( $client, $dep_id );
-            my $status  = $dep_bug->status;
+            my $dep_bug = GitBz::Progress::with_spinner( "Checking dependency bug $dep_id", sub {
+                return GitBz::Bug->get( $client, $dep_id );
+            });
+            my $status = $dep_bug->status;
 
             # Only prompt for dependencies in relevant states
             if (   $status eq 'Needs Signoff'
@@ -162,6 +163,7 @@ sub apply_bug_with_dependencies {
     # Track as applied only if patches were actually applied
     if ($patches_applied) {
         push @bugs_applied, $bug_ref;
+        print "\n✓ Successfully applied $patches_applied patch(es) from bug $bug_ref\n";
     }
 
     return $patches_applied;
@@ -289,11 +291,15 @@ sub apply_bug_patches {
     my ( $self, $bug_ref, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = GitBz::Bug->get( $client, $bug_ref );
+    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+        return GitBz::Bug->get( $client, $bug_ref );
+    });
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
-    my $attachments = $bug->attachments;
+    my $attachments = GitBz::Progress::with_spinner( "Fetching attachments", sub {
+        return $bug->attachments;
+    });
 
     # Filter for patch attachments
     my @patches;
@@ -509,10 +515,14 @@ sub prepare_patch_files {
     my $temp_dir = File::Temp->newdir( CLEANUP => 0 );
     my @patch_info;
 
-    # Save all attachments to temp directory
+    # Save patches directly from REST API data
+    print "\nPreparing " . scalar(@$attachments) . " patch(es):\n";
     for my $i ( 0 .. $#$attachments ) {
         my $att      = $attachments->[$i];
         my $filename = sprintf( "%s/%04d-%s.patch", $temp_dir, $i + 1, $att->{id} );
+
+        my $counter = GitBz::Progress::progress_counter($i + 1, scalar(@$attachments));
+        my $spinner = GitBz::Progress::start_spinner("$counter Preparing $att->{summary}");
 
         # Decode base64 data from REST API
         my $decoded_patch = decode_base64( $att->{data} );
@@ -520,6 +530,8 @@ sub prepare_patch_files {
         open my $fh, '>', $filename or die "Cannot write $filename: $!";
         print $fh $decoded_patch;
         close $fh;
+
+        GitBz::Progress::stop_spinner($spinner, 'success');
 
         push @patch_info, {
             file    => $filename,
@@ -587,7 +599,6 @@ sub apply_patches {
 
     # Clean up temp directory if all patches applied successfully
     unless ($failed) {
-        print "\n✓ Successfully applied all patches\n" if $patch_info && @$patch_info;
         rmtree($temp_dir);
     }
 }
