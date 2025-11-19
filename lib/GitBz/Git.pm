@@ -177,4 +177,46 @@ sub format_patch {
     return $class->run( 'format-patch', '--stdout', '-M', $range );
 }
 
+=head2 get_trailer
+
+    my $value = GitBz::Git->get_trailer($commit_id, $key);
+    my @values = GitBz::Git->get_trailer($commit_id, $key);
+
+Extracts trailer value(s) from a commit. Returns the trailer value in scalar context,
+or all values in list context (for trailers that appear multiple times).
+
+=cut
+
+sub get_trailer {
+    my ( $class, $commit_id, $key ) = @_;
+
+    my $output = try {
+        $class->run( 'log', "--format=%(trailers:key=$key,valueonly)", '-1', $commit_id );
+    } catch {
+        return;
+    };
+
+    return unless $output;
+
+    my @values = split /\n/, $output;
+    @values = grep { $_ ne '' } @values;
+
+    return wantarray ? @values : $values[0];
+}
+
+=head2 get_sponsors
+
+    my @sponsors = GitBz::Git->get_sponsors($commit_id);
+
+Extracts all "Sponsored-by:" trailer values from a commit.
+
+=cut
+
+sub get_sponsors {
+    my ( $class, $commit_id ) = @_;
+
+    my @sponsors = $class->get_trailer( $commit_id, 'Sponsored-by' );
+    return @sponsors;
+}
+
 1;

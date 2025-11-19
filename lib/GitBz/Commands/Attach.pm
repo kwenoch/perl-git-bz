@@ -291,6 +291,12 @@ sub attach_patches {
             my $old = $bug->cf_patch_complexity || 'none';
             print "  ✓ Patch-complexity: $old → $bug_updates{cf_patch_complexity}\n";
         }
+        if (   $bug_updates{cf_sponsors}
+            && $bug_updates{cf_sponsors} ne ( $bug->cf_sponsors || '' ) )
+        {
+            my $old = $bug->cf_sponsors || 'none';
+            print "  ✓ Sponsors: $old → $bug_updates{cf_sponsors}\n";
+        }
         if ( $bug_updates{comment} ) {
             print "  ✓ Added comment\n";
         }
@@ -404,8 +410,18 @@ sub edit_bug_updates {
 
     # Show commits being attached as reference
     $template .= "# Commits being attached:\n";
+    my %all_sponsors;
     for my $commit (@$commits) {
         $template .= "# " . substr( $commit->{id}, 0, 7 ) . ": $commit->{subject}\n";
+
+        # Extract and show sponsors for this commit
+        my @sponsors = GitBz::Git->get_sponsors( $commit->{id} );
+        if (@sponsors) {
+            for my $sponsor (@sponsors) {
+                $template .= "#   Sponsored-by: $sponsor\n";
+                $all_sponsors{$sponsor} = 1;
+            }
+        }
     }
     $template .= "\n";
 
@@ -446,6 +462,32 @@ sub edit_bug_updates {
         for my $comp (@$complexity_values) {
             $template .= "# Patch-complexity: $comp\n";
         }
+    }
+    $template .= "\n";
+
+    # Add sponsors section
+    my $current_sponsors = $bug->cf_sponsors || "";
+    $template .= "# Current sponsors: $current_sponsors\n";
+
+    # Build proposed sponsors list from current + commits
+    my %proposed_sponsors;
+    if ($current_sponsors) {
+        # Split existing sponsors by comma and trim whitespace
+        for my $sponsor (split /,/, $current_sponsors) {
+            $sponsor =~ s/^\s+|\s+$//g;
+            $proposed_sponsors{$sponsor} = 1 if $sponsor;
+        }
+    }
+    # Add sponsors from commits
+    for my $sponsor (sort keys %all_sponsors) {
+        $proposed_sponsors{$sponsor} = 1;
+    }
+
+    if (%proposed_sponsors) {
+        my $sponsors_str = join(', ', sort keys %proposed_sponsors);
+        $template .= "Sponsors: $sponsors_str\n";
+    } else {
+        $template .= "# Sponsors: Sponsor One, Sponsor Two\n";
     }
     $template .= "\n";
 
@@ -524,6 +566,8 @@ sub parse_bug_updates {
             $bug_updates{status} = $1;
         } elsif ( $line =~ /^\s*Patch-complexity\s*:\s*(.+)/ ) {
             $bug_updates{cf_patch_complexity} = $1;
+        } elsif ( $line =~ /^\s*Sponsors\s*:\s*(.+)/ ) {
+            $bug_updates{cf_sponsors} = $1;
         } elsif ( $line =~ /^\s*Depends\s*:\s*([Bb][Uu][Gg])?\s*(\d+)/ ) {
             push @{ $bug_updates{depends_on} }, $2;
         } else {
