@@ -412,6 +412,12 @@ sub attach_patches {
             my $old = $bug->cf_sponsors || 'none';
             print "  ✓ Sponsors: $old → $bug_updates{cf_sponsors}\n";
         }
+        if (   $bug_updates{cf_sponsorship}
+            && $bug_updates{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
+        {
+            my $old = $bug->cf_sponsorship || 'none';
+            print "  ✓ Sponsorship: $old → $bug_updates{cf_sponsorship}\n";
+        }
         if ( $bug_updates{comment} ) {
             print "  ✓ Added comment\n";
         }
@@ -721,6 +727,17 @@ sub parse_bug_updates {
             $bug_updates{depends_on} = \%depends_update;
         } else {
             delete $bug_updates{depends_on};
+        }
+    }
+
+    # Auto-update cf_sponsorship to 'Sponsored' if sponsors are being added
+    if ( $bug_updates{cf_sponsors} ) {
+        my $current_sponsorship = $bug->cf_sponsorship || '';
+        my @unsponsored_values  = ( '---', 'Unsponsored', 'Seeking sponsor' );
+
+        # Check if current sponsorship indicates no sponsorship
+        if ( grep { $_ eq $current_sponsorship } @unsponsored_values ) {
+            $bug_updates{cf_sponsorship} = 'Sponsored';
         }
     }
 

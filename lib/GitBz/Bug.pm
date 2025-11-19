@@ -73,6 +73,7 @@ sub resolution          { $_[0]->{data}->{resolution} }
 sub depends_on          { $_[0]->{data}->{depends_on} || [] }
 sub cf_patch_complexity { $_[0]->{data}->{cf_patch_complexity} }
 sub cf_sponsors         { $_[0]->{data}->{cf_sponsors} }
+sub cf_sponsorship      { $_[0]->{data}->{cf_sponsorship} }
 
 =head2 attachments
 
