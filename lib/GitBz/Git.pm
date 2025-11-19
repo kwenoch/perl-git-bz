@@ -219,4 +219,50 @@ sub get_sponsors {
     return @sponsors;
 }
 
+=head2 add_trailer_to_commit
+
+    GitBz::Git->add_trailer_to_commit($commit_id, $key, $value);
+
+Adds a trailer to a commit message using git interpret-trailers and git commit --amend.
+Only works for the HEAD commit or requires interactive rebase for others.
+
+=cut
+
+sub add_trailer_to_commit {
+    my ( $class, $commit_id, $key, $value ) = @_;
+
+    # Get the current commit message
+    my $current_msg = $class->run( 'log', '--format=%B', '-1', $commit_id );
+
+    # Use git interpret-trailers to add the new trailer
+    my $new_msg = $class->run_with_input( $current_msg, 'interpret-trailers', '--trailer', "$key: $value" );
+
+    return $new_msg;
+}
+
+=head2 amend_commit_message
+
+    GitBz::Git->amend_commit_message($commit_id, $new_message);
+
+Amends a commit with a new message. Only works if the commit is HEAD.
+Throws an exception if the commit is not HEAD.
+
+=cut
+
+sub amend_commit_message {
+    my ( $class, $commit_id, $new_message ) = @_;
+
+    # Verify this is the HEAD commit
+    my $head_id = $class->run( 'rev-parse', 'HEAD' );
+    chomp $head_id;
+
+    if ( $commit_id ne $head_id && !( $head_id =~ /^$commit_id/ ) ) {
+        GitBz::Exception::Git->throw(
+            "Cannot amend commit $commit_id - only HEAD commit can be amended. " . "Use git rebase to modify older commits." );
+    }
+
+    # Amend the commit with the new message
+    $class->run_with_input( $new_message, 'commit', '--amend', '-F', '-' );
+}
+
 1;

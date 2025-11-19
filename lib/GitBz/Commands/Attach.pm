@@ -209,6 +209,118 @@ sub confirm_attachment {
     }
 }
 
+=head2 check_missing_sponsors
+
+    $attach->check_missing_sponsors($bug, \@commits);
+
+Checks if bug has sponsors that aren't in any commit trailers.
+Offers to add missing sponsors to commits.
+
+=cut
+
+sub check_missing_sponsors {
+    my ( $self, $bug, $commits ) = @_;
+
+    # Get sponsors from bug
+    my $bug_sponsors_str = $bug->cf_sponsors || '';
+    return unless $bug_sponsors_str;
+
+    # Parse bug sponsors into a set
+    my %bug_sponsors;
+    for my $sponsor ( split /,/, $bug_sponsors_str ) {
+        $sponsor =~ s/^\s+|\s+$//g;
+        $bug_sponsors{$sponsor} = 1 if $sponsor;
+    }
+
+    return unless %bug_sponsors;
+
+    # Get all sponsors from commits
+    my %commit_sponsors;
+    for my $commit (@$commits) {
+        my @sponsors = GitBz::Git->get_sponsors( $commit->{id} );
+        for my $sponsor (@sponsors) {
+            $commit_sponsors{$sponsor} = 1;
+        }
+    }
+
+    # Find sponsors in bug but not in any commit
+    my @missing_sponsors;
+    for my $sponsor ( sort keys %bug_sponsors ) {
+        unless ( $commit_sponsors{$sponsor} ) {
+            push @missing_sponsors, $sponsor;
+        }
+    }
+
+    return unless @missing_sponsors;
+
+    # Alert user about missing sponsors
+    print "\n⚠️  Bug " . $bug->id . " has sponsors not in commit trailers:\n";
+    for my $sponsor (@missing_sponsors) {
+        print "  • $sponsor\n";
+    }
+    print "\nWould you like to add these sponsors to commit trailers? [y/N]: ";
+    my $response = <STDIN>;
+    chomp $response;
+
+    return unless $response =~ /^[yY]/;
+
+    # Show picklist of commits
+    print "\nSelect commits to add sponsors to:\n";
+    my @selected_commits;
+
+    for my $i ( 0 .. $#$commits ) {
+        my $commit = $commits->[$i];
+        print "\n[$i] " . substr( $commit->{id}, 0, 7 ) . ": $commit->{subject}\n";
+
+        # Show existing sponsors for this commit
+        my @existing = GitBz::Git->get_sponsors( $commit->{id} );
+        if (@existing) {
+            print "    Current sponsors: " . join( ', ', @existing ) . "\n";
+        }
+
+        print "    Add missing sponsors to this commit? [y/N]: ";
+        my $commit_response = <STDIN>;
+        chomp $commit_response;
+
+        if ( $commit_response =~ /^[yY]/ ) {
+            push @selected_commits, $commit;
+        }
+    }
+
+    return unless @selected_commits;
+
+    # Add trailers to selected commits
+    print "\n";
+    my $commits_modified = 0;
+
+    for my $commit (@selected_commits) {
+        my $commit_msg = GitBz::Git->run( 'log', '--format=%B', '-1', $commit->{id} );
+
+        # Add each missing sponsor as a trailer
+        for my $sponsor (@missing_sponsors) {
+            $commit_msg = GitBz::Git->add_trailer_to_commit( $commit->{id}, 'Sponsored-by', $sponsor );
+        }
+
+        # Check if this is HEAD and can be amended
+        my $head_id = GitBz::Git->run( 'rev-parse', 'HEAD' );
+        chomp $head_id;
+
+        if ( $commit->{id} eq $head_id || $head_id =~ /^$commit->{id}/ ) {
+            GitBz::Git->amend_commit_message( $commit->{id}, $commit_msg );
+            print "✓ Added sponsors to commit " . substr( $commit->{id}, 0, 7 ) . "\n";
+            $commits_modified++;
+        } else {
+            print "⚠️  Cannot modify commit " . substr( $commit->{id}, 0, 7 ) . " (not HEAD)\n";
+            print "   Use 'git rebase -i' to modify older commits manually\n";
+        }
+    }
+
+    if ($commits_modified) {
+        print "\n✓ Modified $commits_modified commit(s)\n";
+        print "Note: If attaching a range, you may need to update the commit references\n\n";
+    }
+}
+
 =head2 attach_patches
 
     $attach->attach_patches($bug_ref, \@commits, \%opts);
@@ -225,6 +337,9 @@ sub attach_patches {
 
     # Preflight checks
     $self->preflight_checks( $bug_ref, $commits );
+
+    # Check for missing sponsors and offer to add them
+    $self->check_missing_sponsors( $bug, $commits ) unless $opts->{yes};
 
     # Show confirmation prompt
     $self->confirm_attachment( $bug_ref, $commits ) unless $opts->{yes};
