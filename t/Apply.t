@@ -42,8 +42,20 @@ subtest 'apply_bug_patches feedback messages' => sub {
             return bless {
                 _summary     => 'Test bug summary',
                 _attachments => [
-                    { id => 123, summary => 'Test patch 1', is_patch => 1, is_obsolete => 0 },
-                    { id => 124, summary => 'Test patch 2', is_patch => 1, is_obsolete => 0 }
+                    {
+                        id          => 123,
+                        summary     => 'Test patch 1',
+                        is_patch    => 1,
+                        is_obsolete => 0,
+                        data        => 'bW9ja2VkIHBhdGNoIGNvbnRlbnQ='    # base64 for "mocked patch content"
+                    },
+                    {
+                        id          => 124,
+                        summary     => 'Test patch 2',
+                        is_patch    => 1,
+                        is_obsolete => 0,
+                        data        => 'bW9ja2VkIHBhdGNoIGNvbnRlbnQ='    # base64 for "mocked patch content"
+                    }
                 ]
                 },
                 'GitBz::Bug';
@@ -56,23 +68,25 @@ subtest 'apply_bug_patches feedback messages' => sub {
     my $apply    = GitBz::Commands::Apply->new($commands);
 
     subtest 'user chooses no' => sub {
-        plan tests => 2;
+        plan tests => 3;
 
         # Mock prompt_multi to simulate user choosing "no"
         my $apply_mock = Test::MockModule->new('GitBz::Commands::Apply');
         $apply_mock->mock( 'prompt_multi', sub { return 'n'; } );
 
         my $result;
-        stdout_like(
-            sub { $result = $apply->apply_bug_patches( "12345", {} ) },
-            qr/\nNo patches applied for bug 12345/,
+        my $output = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", {} ) } );
+
+        like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
+        like(
+            $output, qr/No patches applied for bug 12345/,
             "Shows 'no patches applied' message when user chooses no"
         );
         is( $result, 0, "Returns 0 when no patches are applied" );
     };
 
     subtest 'interactive with no selection' => sub {
-        plan tests => 2;
+        plan tests => 3;
 
         # Mock prompt_multi to simulate interactive with no selection
         my $apply_mock = Test::MockModule->new('GitBz::Commands::Apply');
@@ -80,32 +94,39 @@ subtest 'apply_bug_patches feedback messages' => sub {
         $apply_mock->mock( 'select_patches_interactively', sub { return (); } );
 
         my $result;
-        stdout_like(
-            sub { $result = $apply->apply_bug_patches( "12345", {} ) },
-            qr/\nNo patches selected for bug 12345/,
+        my $output = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", {} ) } );
+
+        like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
+        like(
+            $output, qr/No patches selected for bug 12345/,
             "Shows 'no patches selected' message when none selected interactively"
         );
         is( $result, 0, "Returns 0 when no patches are selected" );
     };
 
     subtest 'user chooses yes - applies all patches' => sub {
-        plan tests => 2;
+        plan tests => 5;
 
         # Mock prompt_multi to simulate user choosing "yes"
         my $apply_mock = Test::MockModule->new('GitBz::Commands::Apply');
         $apply_mock->mock( 'prompt_multi',  sub { return 'y'; } );
         $apply_mock->mock( 'apply_patches', sub { } );               # Mock actual patch application
 
-        my $result = $apply->apply_bug_patches( "12345", {} );
+        my $result;
+        my $output = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", {} ) } );
+
+        like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
+        like( $output, qr/• 123 - Test patch 1/,           "Shows first patch in list" );
+        like( $output, qr/• 124 - Test patch 2/,           "Shows second patch in list" );
         is( $result, 2, "Returns 2 when 2 patches are applied" );
 
-        # Test with confirm option (auto-yes)
-        $result = $apply->apply_bug_patches( "12345", { confirm => 1 } );
+        # Test with confirm option (auto-yes) - also capture output
+        my $output2 = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", { confirm => 1 } ) } );
         is( $result, 2, "Returns 2 when confirm option is used" );
     };
 
     subtest 'interactive with partial selection' => sub {
-        plan tests => 1;
+        plan tests => 2;
 
         # Mock prompt_multi to simulate interactive with selection
         my $apply_mock = Test::MockModule->new('GitBz::Commands::Apply');
@@ -113,13 +134,24 @@ subtest 'apply_bug_patches feedback messages' => sub {
         $apply_mock->mock(
             'select_patches_interactively',
             sub {
-                # Return only first patch
-                return ( { id => 123, summary => 'Test patch 1', is_patch => 1, is_obsolete => 0 } );
+                # Return only first patch with data field
+                return (
+                    {
+                        id          => 123,
+                        summary     => 'Test patch 1',
+                        is_patch    => 1,
+                        is_obsolete => 0,
+                        data        => 'bW9ja2VkIHBhdGNoIGNvbnRlbnQ='    # base64 for "mocked patch content"
+                    }
+                );
             }
         );
         $apply_mock->mock( 'apply_patches', sub { } );    # Mock actual patch application
 
-        my $result = $apply->apply_bug_patches( "12345", {} );
+        my $result;
+        my $output = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", {} ) } );
+
+        like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
         is( $result, 1, "Returns 1 when 1 patch is selected interactively" );
     };
 };
