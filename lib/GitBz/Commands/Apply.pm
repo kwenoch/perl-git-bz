@@ -172,6 +172,7 @@ sub apply_bug_with_dependencies {
     $apply->handle_git_am_state(\%opts);
 
 Handles git-am workflow states (continue, skip, abort).
+Continues applying remaining patches after --continue or --skip.
 Cleans up temp directory on abort or successful completion.
 
 =cut
@@ -192,8 +193,8 @@ sub handle_git_am_state {
         GitBz::Exception->throw("Not inside a 'git bz apply' operation");
     }
 
-    # Check if this is a git-bz operation and get temp directory
-    my ($has_state, $temp_dir) = $self->load_state($git_dir);
+    # Check if this is a git-bz operation and get state
+    my ($has_state, $temp_dir, $remaining_patches) = $self->load_state($git_dir);
 
     if ( $opts->{abort} ) {
         GitBz::Git->run( 'am', '--abort' );
@@ -206,19 +207,74 @@ sub handle_git_am_state {
         }
     } elsif ( $opts->{continue} ) {
         GitBz::Git->run( 'am', '--continue' );
-        # Clean up temp directory on successful completion
-        if ($temp_dir && -d $temp_dir) {
-            rmtree($temp_dir);
+        print "\n✓ Continued with current patch\n";
+
+        # Continue with remaining patches if any
+        if ($remaining_patches && @$remaining_patches) {
+            print "\nContinuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n";
+            my $patch_info = $self->load_patch_info_from_temp($temp_dir, $remaining_patches);
+            $self->apply_patches($patch_info, $temp_dir, $opts);
+        } else {
+            # No remaining patches - just clean up
+            if ($temp_dir && -d $temp_dir) {
+                rmtree($temp_dir);
+            }
         }
-        print "\n✓ Successfully continued applying patches\n";
     } elsif ( $opts->{skip} ) {
         GitBz::Git->run( 'am', '--skip' );
-        # Clean up temp directory on successful completion
-        if ($temp_dir && -d $temp_dir) {
-            rmtree($temp_dir);
-        }
         print "\n⊘ Skipped current patch\n";
+
+        # Continue with remaining patches if any
+        if ($remaining_patches && @$remaining_patches) {
+            print "\nContinuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n";
+            my $patch_info = $self->load_patch_info_from_temp($temp_dir, $remaining_patches);
+            $self->apply_patches($patch_info, $temp_dir, $opts);
+        } else {
+            # No remaining patches - just clean up
+            if ($temp_dir && -d $temp_dir) {
+                rmtree($temp_dir);
+            }
+        }
     }
+}
+
+=head2 load_patch_info_from_temp
+
+    my \@patch_info = $apply->load_patch_info_from_temp($temp_dir, \@patch_ids);
+
+Reconstructs patch_info array from temp directory and patch IDs.
+Returns array of hashrefs with {file => path, id => patch_id, summary => ''}.
+
+=cut
+
+sub load_patch_info_from_temp {
+    my ( $self, $temp_dir, $patch_ids ) = @_;
+
+    return () unless $patch_ids && @$patch_ids && $temp_dir && -d $temp_dir;
+
+    # Find all patch files in temp directory
+    opendir my $dh, $temp_dir or die "Cannot read temp directory: $!";
+    my @all_files = grep { /\.patch$/ } readdir($dh);
+    closedir $dh;
+
+    # Build patch_info for requested IDs
+    my @patch_info;
+    for my $patch_id (@$patch_ids) {
+        # Find the patch file for this ID
+        my ($patch_file) = grep { /-${patch_id}\.patch$/ } @all_files;
+        unless ($patch_file) {
+            print STDERR "Warning: Could not find patch file for ID $patch_id, skipping\n";
+            next;
+        }
+
+        push @patch_info, {
+            file    => "$temp_dir/$patch_file",
+            id      => $patch_id,
+            summary => ''  # Summary not available when loading from temp
+        };
+    }
+
+    return \@patch_info;
 }
 
 =head2 apply_bug_patches
@@ -278,7 +334,12 @@ sub apply_bug_patches {
         return 0;
     }
 
-    $self->apply_patches( \@selected_patches, $opts );
+    # Convert attachments to patch files
+    my ( $temp_dir, $patch_info ) = $self->prepare_patch_files(\@selected_patches);
+
+    # Apply all patch files
+    $self->apply_patches( $patch_info, $temp_dir, $opts );
+
     return scalar @selected_patches;
 }
 
@@ -368,15 +429,15 @@ sub select_patches_interactively {
 
 =head2 save_state
 
-    $apply->save_state($git_dir, $temp_dir);
+    $apply->save_state($git_dir, $temp_dir, \@remaining_patch_ids);
 
 Saves git-bz state when git-am fails for proper cleanup on abort.
-Stores temp directory location for later cleanup.
+Stores temp directory location and remaining patches.
 
 =cut
 
 sub save_state {
-    my ( $self, $git_dir, $temp_dir ) = @_;
+    my ( $self, $git_dir, $temp_dir, $remaining_patch_ids ) = @_;
 
     my $state_file = "$git_dir/rebase-apply/git-bz";
 
@@ -388,15 +449,20 @@ sub save_state {
         print $fh "temp_dir=$temp_dir\n";
     }
 
+    # Store remaining patch IDs in parseable format
+    if ($remaining_patch_ids && @$remaining_patch_ids) {
+        print $fh "remaining_patches=" . join(",", @$remaining_patch_ids) . "\n";
+    }
+
     close $fh;
 }
 
 =head2 load_state
 
-    my ($has_state, $temp_dir) = $apply->load_state($git_dir);
+    my ($has_state, $temp_dir, $remaining_patches) = $apply->load_state($git_dir);
 
-Loads git-bz state file if it exists. Returns whether state was found
-and the temp directory path if stored.
+Loads git-bz state file if it exists. Returns whether state was found,
+the temp directory path, and array ref of remaining patch IDs.
 
 =cut
 
@@ -404,39 +470,46 @@ sub load_state {
     my ( $self, $git_dir ) = @_;
 
     my $state_file = "$git_dir/rebase-apply/git-bz";
-    return (0, undef) unless -f $state_file;
+    return (0, undef, undef) unless -f $state_file;
 
-    # Read temp directory from state file
-    open my $fh, '<', $state_file or return (1, undef);
+    # Read state from file
+    open my $fh, '<', $state_file or return (1, undef, undef);
     my $temp_dir;
+    my @remaining_patches;
+
     while (my $line = <$fh>) {
         if ($line =~ /^temp_dir=(.+)$/) {
             $temp_dir = $1;
             chomp $temp_dir;
-            last;
+        }
+        elsif ($line =~ /^remaining_patches=(.+)$/) {
+            my $patches_str = $1;
+            chomp $patches_str;
+            @remaining_patches = split(/,/, $patches_str);
         }
     }
     close $fh;
 
-    return (1, $temp_dir);
+    return (1, $temp_dir, \@remaining_patches);
 }
 
-=head2 apply_patches
+=head2 prepare_patch_files
 
-    $apply->apply_patches(\@attachments, \%opts);
+    my ($temp_dir, \@patch_info) = $apply->prepare_patch_files(\@attachments);
 
-Applies selected patches using git-am.
+Converts attachments to patch files in a temp directory.
+Returns temp directory and array of hashrefs with {file => path, id => att_id, summary => att_summary}.
 
 =cut
 
-sub apply_patches {
-    my ( $self, $attachments, $opts ) = @_;
+sub prepare_patch_files {
+    my ( $self, $attachments ) = @_;
 
     # Create temp directory - don't auto-cleanup so files are available on failure
     my $temp_dir = File::Temp->newdir( CLEANUP => 0 );
-    my @patch_files;
+    my @patch_info;
 
-    # Save patches directly from REST API data
+    # Save all attachments to temp directory
     for my $i ( 0 .. $#$attachments ) {
         my $att      = $attachments->[$i];
         my $filename = sprintf( "%s/%04d-%s.patch", $temp_dir, $i + 1, $att->{id} );
@@ -448,29 +521,75 @@ sub apply_patches {
         print $fh $decoded_patch;
         close $fh;
 
-        push @patch_files, $filename;
+        push @patch_info, {
+            file    => $filename,
+            id      => $att->{id},
+            summary => $att->{summary}
+        };
     }
 
-    # Apply patches with git am
-    my @git_am_args = ('am');
-    push @git_am_args, '--signoff' if $opts->{signoff};
-    push @git_am_args, @patch_files;
+    return ( $temp_dir, \@patch_info );
+}
 
-    try {
-        GitBz::Git->run(@git_am_args);
-        # Success - clean up temp directory
+=head2 apply_patches
+
+    $apply->apply_patches(\@patch_info, $temp_dir, \%opts);
+
+Applies patch files sequentially with 3-way merge support.
+patch_info is array of hashrefs with {file => path, id => att_id, summary => att_summary}.
+
+=cut
+
+sub apply_patches {
+    my ( $self, $patch_info, $temp_dir, $opts ) = @_;
+
+    my $git_dir = GitBz::Git->run('rev-parse', '--git-dir');
+    chomp $git_dir;
+
+    print "\nApplying patches with git-am...\n";
+
+    my $failed = 0;
+    for my $i ( 0 .. $#$patch_info ) {
+        my $info = $patch_info->[$i];
+
+        # Apply this patch with 3-way merge for better conflict resolution
+        my @git_am_args = ('am', '-3');
+        push @git_am_args, '--signoff' if $opts->{signoff};
+        push @git_am_args, $info->{file};
+
+        try {
+            GitBz::Git->run(@git_am_args);
+        } catch {
+            $failed = 1;
+            # If git-am failed and saved its state, save our state too
+            if (-d "$git_dir/rebase-apply") {
+                # Save which patches remain to be applied
+                my @remaining_patch_ids = map { $patch_info->[$_]->{id} } (($i + 1) .. $#$patch_info);
+                $self->save_state($git_dir, $temp_dir, \@remaining_patch_ids);
+
+                print STDERR "\n";
+                my $summary_msg = $info->{summary} ? " - $info->{summary}" : "";
+                print STDERR "Patch application failed for attachment $info->{id}$summary_msg\n";
+                print STDERR "\n";
+                print STDERR "Patches left in $temp_dir for manual application if needed\n";
+                print STDERR "\n";
+                print STDERR "To resolve:\n";
+                print STDERR "  1. Fix conflicts (use 'git mergetool' or edit files manually)\n";
+                print STDERR "  2. Stage resolved files with 'git add'\n";
+                print STDERR "  3. Continue with 'git bz apply --continue' or 'git am --continue'\n";
+                print STDERR "  4. Or skip this patch with 'git bz apply --skip'\n";
+                print STDERR "  5. Or abort with 'git bz apply --abort'\n";
+                print STDERR "\n";
+            }
+            die $_;
+        };
+    }
+
+    # Clean up temp directory if all patches applied successfully
+    unless ($failed) {
+        print "\n✓ Successfully applied all patches\n" if $patch_info && @$patch_info;
         rmtree($temp_dir);
-    } catch {
-        # If git-am failed and saved its state, save our state too for cleanup
-        my $git_dir = GitBz::Git->run('rev-parse', '--git-dir');
-        chomp $git_dir;
-        if (-d "$git_dir/rebase-apply") {
-            $self->save_state($git_dir, $temp_dir);
-            print STDERR "\nPatches left in $temp_dir for manual application if needed\n";
-            print STDERR "Use 'git bz apply --abort' to abort and clean up temp files\n\n";
-        }
-        die $_;
-    };
+    }
 }
 
 1;
