@@ -41,6 +41,7 @@ use GitBz::Git;
 use GitBz::Bug;
 use GitBz::Exception;
 use File::Temp;
+use File::Path qw(rmtree);
 use MIME::Base64;
 
 # Track applied bugs to avoid duplicates during recursive dependency resolution
@@ -171,18 +172,52 @@ sub apply_bug_with_dependencies {
     $apply->handle_git_am_state(\%opts);
 
 Handles git-am workflow states (continue, skip, abort).
+Cleans up temp directory on abort or successful completion.
 
 =cut
 
 sub handle_git_am_state {
     my ( $self, $opts ) = @_;
 
-    if ( $opts->{continue} ) {
+    # Check if we're in a git-am session
+    my $git_dir = try {
+        my $dir = GitBz::Git->run('rev-parse', '--git-dir');
+        chomp $dir;
+        return $dir;
+    } catch {
+        GitBz::Exception->throw("Not inside a git repository");
+    };
+
+    unless (-d "$git_dir/rebase-apply") {
+        GitBz::Exception->throw("Not inside a 'git bz apply' operation");
+    }
+
+    # Check if this is a git-bz operation and get temp directory
+    my ($has_state, $temp_dir) = $self->load_state($git_dir);
+
+    if ( $opts->{abort} ) {
+        GitBz::Git->run( 'am', '--abort' );
+        # Clean up temp directory if it exists
+        if ($temp_dir && -d $temp_dir) {
+            rmtree($temp_dir);
+            print "\n✗ Aborted patch application and cleaned up temp files\n";
+        } else {
+            print "\n✗ Aborted patch application\n";
+        }
+    } elsif ( $opts->{continue} ) {
         GitBz::Git->run( 'am', '--continue' );
+        # Clean up temp directory on successful completion
+        if ($temp_dir && -d $temp_dir) {
+            rmtree($temp_dir);
+        }
+        print "\n✓ Successfully continued applying patches\n";
     } elsif ( $opts->{skip} ) {
         GitBz::Git->run( 'am', '--skip' );
-    } elsif ( $opts->{abort} ) {
-        GitBz::Git->run( 'am', '--abort' );
+        # Clean up temp directory on successful completion
+        if ($temp_dir && -d $temp_dir) {
+            rmtree($temp_dir);
+        }
+        print "\n⊘ Skipped current patch\n";
     }
 }
 
@@ -331,6 +366,61 @@ sub select_patches_interactively {
     return @selected;
 }
 
+=head2 save_state
+
+    $apply->save_state($git_dir, $temp_dir);
+
+Saves git-bz state when git-am fails for proper cleanup on abort.
+Stores temp directory location for later cleanup.
+
+=cut
+
+sub save_state {
+    my ( $self, $git_dir, $temp_dir ) = @_;
+
+    my $state_file = "$git_dir/rebase-apply/git-bz";
+
+    open my $fh, '>', $state_file or die "Cannot write state file: $!";
+    print $fh "# git-bz state file\n";
+
+    # Store temp directory path for cleanup on abort
+    if ($temp_dir) {
+        print $fh "temp_dir=$temp_dir\n";
+    }
+
+    close $fh;
+}
+
+=head2 load_state
+
+    my ($has_state, $temp_dir) = $apply->load_state($git_dir);
+
+Loads git-bz state file if it exists. Returns whether state was found
+and the temp directory path if stored.
+
+=cut
+
+sub load_state {
+    my ( $self, $git_dir ) = @_;
+
+    my $state_file = "$git_dir/rebase-apply/git-bz";
+    return (0, undef) unless -f $state_file;
+
+    # Read temp directory from state file
+    open my $fh, '<', $state_file or return (1, undef);
+    my $temp_dir;
+    while (my $line = <$fh>) {
+        if ($line =~ /^temp_dir=(.+)$/) {
+            $temp_dir = $1;
+            chomp $temp_dir;
+            last;
+        }
+    }
+    close $fh;
+
+    return (1, $temp_dir);
+}
+
 =head2 apply_patches
 
     $apply->apply_patches(\@attachments, \%opts);
@@ -342,7 +432,8 @@ Applies selected patches using git-am.
 sub apply_patches {
     my ( $self, $attachments, $opts ) = @_;
 
-    my $temp_dir = File::Temp->newdir();
+    # Create temp directory - don't auto-cleanup so files are available on failure
+    my $temp_dir = File::Temp->newdir( CLEANUP => 0 );
     my @patch_files;
 
     # Save patches directly from REST API data
@@ -365,7 +456,21 @@ sub apply_patches {
     push @git_am_args, '--signoff' if $opts->{signoff};
     push @git_am_args, @patch_files;
 
-    GitBz::Git->run(@git_am_args);
+    try {
+        GitBz::Git->run(@git_am_args);
+        # Success - clean up temp directory
+        rmtree($temp_dir);
+    } catch {
+        # If git-am failed and saved its state, save our state too for cleanup
+        my $git_dir = GitBz::Git->run('rev-parse', '--git-dir');
+        chomp $git_dir;
+        if (-d "$git_dir/rebase-apply") {
+            $self->save_state($git_dir, $temp_dir);
+            print STDERR "\nPatches left in $temp_dir for manual application if needed\n";
+            print STDERR "Use 'git bz apply --abort' to abort and clean up temp files\n\n";
+        }
+        die $_;
+    };
 }
 
 1;
