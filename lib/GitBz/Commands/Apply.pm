@@ -104,22 +104,27 @@ sub execute {
 
 =head2 apply_bug_with_dependencies
 
-    $apply->apply_bug_with_dependencies($bug_ref, \%opts);
+    $apply->apply_bug_with_dependencies($bug_ref, \%opts, $bug);
 
 Applies a bug and its dependencies recursively.
+If $bug object is provided, uses it; otherwise fetches the bug.
 
 =cut
 
 sub apply_bug_with_dependencies {
-    my ( $self, $bug_ref, $opts ) = @_;
+    my ( $self, $bug_ref, $opts, $bug ) = @_;
 
     # Skip if already applied
     return if grep { $_ eq $bug_ref } @bugs_applied;
 
     my $client = $self->{commands}->{client};
-    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
-        return GitBz::Bug->get( $client, $bug_ref );
-    });
+
+    # Fetch bug if not already provided
+    unless ($bug) {
+        $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+            return GitBz::Bug->get( $client, $bug_ref );
+        });
+    }
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
@@ -147,7 +152,8 @@ sub apply_bug_with_dependencies {
 
                 if ( $choice eq "y" ) {
                     try {
-                        $self->apply_bug_with_dependencies( $dep_id, $opts );
+                        # Pass the already-fetched dependency bug to avoid re-fetching
+                        $self->apply_bug_with_dependencies( $dep_id, $opts, $dep_bug );
                     } catch {
                         GitBz::Exception->throw(
                             "Cannot apply cleanly patches from bug $dep_id. " . "Everything will be left dirty. $_" );
@@ -157,8 +163,8 @@ sub apply_bug_with_dependencies {
         }
     }
 
-    # Apply the main bug
-    my $patches_applied = $self->apply_bug_patches( $bug_ref, $opts );
+    # Apply the main bug (pass the already-fetched bug object)
+    my $patches_applied = $self->apply_bug_patches( $bug_ref, $opts, $bug );
 
     # Track as applied only if patches were actually applied
     if ($patches_applied) {
@@ -281,19 +287,23 @@ sub load_patch_info_from_temp {
 
 =head2 apply_bug_patches
 
-    $apply->apply_bug_patches($bug_ref, \%opts);
+    $apply->apply_bug_patches($bug_ref, \%opts, $bug);
 
 Retrieves and applies patches from a bug.
+If $bug object is provided, uses it; otherwise fetches the bug.
 
 =cut
 
 sub apply_bug_patches {
-    my ( $self, $bug_ref, $opts ) = @_;
+    my ( $self, $bug_ref, $opts, $bug ) = @_;
 
-    my $client = $self->{commands}->{client};
-    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
-        return GitBz::Bug->get( $client, $bug_ref );
-    });
+    # Fetch bug if not already provided
+    unless ($bug) {
+        my $client = $self->{commands}->{client};
+        $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
+            return GitBz::Bug->get( $client, $bug_ref );
+        });
+    }
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
