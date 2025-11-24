@@ -66,7 +66,7 @@ sub run {
             # Don't chomp format-patch output to preserve exact formatting
             chomp $stdout unless $command eq 'format-patch';
         }
-        return $stdout || '';
+        return $stdout // '';
     } catch {
         GitBz::Exception::Git->throw($_);
     };
@@ -97,7 +97,7 @@ sub run_with_input {
             # Decode UTF-8 from Git output
             $stdout = decode( 'UTF-8', $stdout, Encode::FB_CROAK );
         }
-        return $stdout || '';
+        return $stdout // '';
     } catch {
         GitBz::Exception::Git->throw($_);
     };

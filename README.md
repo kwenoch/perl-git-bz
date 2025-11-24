@@ -68,11 +68,30 @@ git config --global credential.https://bugs.koha-community.org.username your-ema
 
 **Benefits:** Secure encrypted storage, unified credential management, automatic approval/rejection feedback to help credential helpers learn from login attempts.
 
+### Verbosity Control
+
+Control the amount of progress output displayed:
+
+```bash
+# Set default verbosity level (0=quiet, 1=default, 2=verbose)
+git config bz.verbose 1
+
+# Level 0: Minimal output (only essential messages)
+# Level 1: Default (spinners and line-replacement progress)
+# Level 2: Verbose (detailed step-by-step output)
+```
+
 ## Usage
 
 ```bash
 # Apply patches from a bug (with dependency resolution)
 git bz apply 38224
+
+# Apply patches with verbose output
+git bz apply -vv 38224
+
+# Apply patches in quiet mode
+git bz apply 38224  # with git config bz.verbose 0
 
 # Attach commits as patches to a bug
 git bz attach 12345 HEAD~2..HEAD

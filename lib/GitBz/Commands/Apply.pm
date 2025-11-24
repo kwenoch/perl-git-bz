@@ -39,6 +39,7 @@ use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use GitBz::Git;
 use GitBz::Bug;
+use GitBz::Config;
 use GitBz::Exception;
 use GitBz::Progress;
 use File::Temp;
@@ -82,7 +83,19 @@ sub execute {
         'confirm'           => \$opts{confirm},
         'signoff|s'         => \$opts{signoff},
         'bugzilla|b=s'      => \$opts{bugzilla},
+        'verbose|v+'        => \$opts{verbose},
     ) or GitBz::Exception->throw("Invalid options");
+
+    # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
+    # Command line flag takes precedence, then config, then default to 1
+    unless ( defined $opts{verbose} ) {
+        my $config_verbose = GitBz::Config->get('bz.verbose', '1');
+        chomp $config_verbose;
+        $opts{verbose} = $config_verbose =~ /^\d+$/ ? $config_verbose : 1;
+    }
+
+    # Set global verbosity for Progress module
+    GitBz::Progress::set_verbosity( $opts{verbose} );
 
     return try {
         if ( $opts{continue} || $opts{skip} || $opts{abort} ) {
@@ -169,7 +182,7 @@ sub apply_bug_with_dependencies {
     # Track as applied only if patches were actually applied
     if ($patches_applied) {
         push @bugs_applied, $bug_ref;
-        print "\n✓ Successfully applied $patches_applied patch(es) from bug $bug_ref\n";
+        GitBz::Progress::print_success("Successfully applied $patches_applied patch(es) from bug $bug_ref");
     }
 
     return $patches_applied;
@@ -298,6 +311,7 @@ sub apply_bug_patches {
     my ( $self, $bug_ref, $opts, $bug ) = @_;
 
     # Fetch bug if not already provided
+    print "\n" if GitBz::Progress::get_verbosity() >= 2;  # Extra newline in verbose mode for readability
     unless ($bug) {
         my $client = $self->{commands}->{client};
         $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
@@ -307,7 +321,7 @@ sub apply_bug_patches {
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
-    my $attachments = GitBz::Progress::with_spinner( "Fetching attachments", sub {
+    my $attachments = GitBz::Progress::with_spinner( "Fetching bug $bug_ref attachments", sub {
         return $bug->attachments;
     });
 
@@ -351,7 +365,7 @@ sub apply_bug_patches {
     }
 
     # Convert attachments to patch files
-    my ( $temp_dir, $patch_info ) = $self->prepare_patch_files(\@selected_patches);
+    my ( $temp_dir, $patch_info ) = $self->prepare_patch_files(\@selected_patches, $opts);
 
     # Apply all patch files
     $self->apply_patches( $patch_info, $temp_dir, $opts );
@@ -511,7 +525,7 @@ sub load_state {
 
 =head2 prepare_patch_files
 
-    my ($temp_dir, \@patch_info) = $apply->prepare_patch_files(\@attachments);
+    my ($temp_dir, \@patch_info) = $apply->prepare_patch_files(\@attachments, \%opts);
 
 Converts attachments to patch files in a temp directory.
 Returns temp directory and array of hashrefs with {file => path, id => att_id, summary => att_summary}.
@@ -519,20 +533,19 @@ Returns temp directory and array of hashrefs with {file => path, id => att_id, s
 =cut
 
 sub prepare_patch_files {
-    my ( $self, $attachments ) = @_;
+    my ( $self, $attachments, $opts ) = @_;
 
     # Create temp directory - don't auto-cleanup so files are available on failure
     my $temp_dir = File::Temp->newdir( CLEANUP => 0 );
     my @patch_info;
 
     # Save patches directly from REST API data
-    print "\nPreparing " . scalar(@$attachments) . " patch(es):\n";
+    # Level 0 (quiet): skip header, Level 1+: show header
+    print "\nPreparing " . scalar(@$attachments) . " patch(es):\n" if GitBz::Progress::get_verbosity() >= 1;
+
     for my $i ( 0 .. $#$attachments ) {
         my $att      = $attachments->[$i];
         my $filename = sprintf( "%s/%04d-%s.patch", $temp_dir, $i + 1, $att->{id} );
-
-        my $counter = GitBz::Progress::progress_counter($i + 1, scalar(@$attachments));
-        my $spinner = GitBz::Progress::start_spinner("$counter Preparing $att->{summary}");
 
         # Decode base64 data from REST API
         my $decoded_patch = decode_base64( $att->{data} );
@@ -541,7 +554,9 @@ sub prepare_patch_files {
         print $fh $decoded_patch;
         close $fh;
 
-        GitBz::Progress::stop_spinner($spinner, 'success');
+        # Show progress based on verbosity level
+        my $counter = sprintf("[%d/%d]", $i + 1, scalar(@$attachments));
+        GitBz::Progress::update_progress_line("$counter Preparing $att->{summary}");
 
         push @patch_info, {
             file    => $filename,
@@ -549,6 +564,9 @@ sub prepare_patch_files {
             summary => $att->{summary}
         };
     }
+
+    # Finalize progress output
+    GitBz::Progress::finalize_progress_line();
 
     return ( $temp_dir, \@patch_info );
 }
@@ -568,7 +586,8 @@ sub apply_patches {
     my $git_dir = GitBz::Git->run('rev-parse', '--git-dir');
     chomp $git_dir;
 
-    print "\nApplying patches with git-am...\n";
+    # Level 0 (quiet): skip header, Level 1+: show header
+    print "\nApplying " . scalar(@$patch_info) . " patch(es):\n" if GitBz::Progress::get_verbosity() >= 1;
 
     my $failed = 0;
     for my $i ( 0 .. $#$patch_info ) {
@@ -581,10 +600,20 @@ sub apply_patches {
 
         try {
             GitBz::Git->run(@git_am_args);
+
+            # Show progress after successful application
+            my $counter = sprintf("[%d/%d]", $i + 1, scalar(@$patch_info));
+            my $summary = $info->{summary} || "patch $info->{id}";
+            GitBz::Progress::update_progress_line("$counter Applied $summary");
         } catch {
             $failed = 1;
             # If git-am failed and saved its state, save our state too
             if (-d "$git_dir/rebase-apply") {
+                # Clear any progress line before printing error (only at level 1)
+                if (GitBz::Progress::get_verbosity() == 1 && -t STDOUT) {
+                    print "\r\e[K";
+                }
+
                 # Save which patches remain to be applied
                 my @remaining_patch_ids = map { $patch_info->[$_]->{id} } (($i + 1) .. $#$patch_info);
                 $self->save_state($git_dir, $temp_dir, \@remaining_patch_ids);
@@ -607,8 +636,9 @@ sub apply_patches {
         };
     }
 
-    # Clean up temp directory if all patches applied successfully
+    # Finalize progress output if all succeeded
     unless ($failed) {
+        GitBz::Progress::finalize_progress_line();
         rmtree($temp_dir);
     }
 }

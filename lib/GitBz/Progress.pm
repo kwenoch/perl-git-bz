@@ -10,6 +10,9 @@ our $VERSION = '0.1.0';
 # Spinner characters for animation (braille dots pattern)
 our @SPINNER_CHARS = qw(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏);
 
+# Global verbosity level (0 = quiet, 1 = default, 2+ = verbose)
+our $VERBOSITY = 1;
+
 =head1 NAME
 
 GitBz::Progress - Progress indicators and feedback for GitBz
@@ -40,6 +43,34 @@ output for GitBz commands. Uses fork-based spinners to animate during
 blocking operations.
 
 =cut
+
+=head2 set_verbosity
+
+Set the global verbosity level for progress output.
+- 0: Quiet (minimal output)
+- 1: Default (spinners and line replacement)
+- 2+: Verbose (each step on new line)
+
+    GitBz::Progress::set_verbosity($level);
+
+=cut
+
+sub set_verbosity {
+    my ($level) = @_;
+    $VERBOSITY = $level // 1;
+}
+
+=head2 get_verbosity
+
+Get the current global verbosity level.
+
+    my $level = GitBz::Progress::get_verbosity();
+
+=cut
+
+sub get_verbosity {
+    return $VERBOSITY;
+}
 
 =head2 start_spinner
 
@@ -222,6 +253,7 @@ sub progress_counter {
 =head2 with_spinner
 
 Execute a code block with an animated spinner.
+Uses global verbosity level to determine whether to show the spinner.
 
     my $result = GitBz::Progress::with_spinner("Fetching bug", sub {
         # ... do work ...
@@ -237,6 +269,12 @@ and the exception is re-thrown.
 sub with_spinner {
     my ( $message, $code ) = @_;
 
+    # Level 0: quiet mode, just execute without spinner
+    if ( $VERBOSITY == 0 ) {
+        return $code->();
+    }
+
+    # Levels 1+: show spinner
     my $spinner = start_spinner($message);
 
     my $result;
@@ -253,6 +291,54 @@ sub with_spinner {
 
     stop_spinner( $spinner, 'success' );
     return $result;
+}
+
+=head2 update_progress_line
+
+Update a progress line based on global verbosity level.
+- Level 0: No output
+- Level 1: Update line in place (default)
+- Level 2+: Print each line
+
+    GitBz::Progress::update_progress_line("[1/10] Processing patch");
+
+=cut
+
+sub update_progress_line {
+    my ($message) = @_;
+
+    my $is_tty = -t STDOUT;
+
+    # Level 0: quiet mode, no output
+    return if $VERBOSITY == 0;
+
+    # Level 2+: verbose mode or non-TTY: print each line
+    if ( $VERBOSITY >= 2 || !$is_tty ) {
+        print "  ✓ $message\n";
+    } else {
+        # Level 1 with TTY: clear line and print new status
+        print "\r\e[K";
+        print colored( ['green'], '  ✓ ' ) . "$message";
+        STDOUT->flush();
+    }
+}
+
+=head2 finalize_progress_line
+
+Finalize the last progress line (ensure newline is printed at verbosity level 1).
+Uses global verbosity level.
+
+    GitBz::Progress::finalize_progress_line();
+
+=cut
+
+sub finalize_progress_line {
+    my $is_tty = -t STDOUT;
+
+    # Only print newline if we were updating in place (level 1 with TTY)
+    if ( $VERBOSITY == 1 && $is_tty ) {
+        print "\n";
+    }
 }
 
 1;

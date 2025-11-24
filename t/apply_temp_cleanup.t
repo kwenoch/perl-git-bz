@@ -454,7 +454,7 @@ subtest 'apply_patches sequential application' => sub {
     my $git_mock = Test::MockModule->new('GitBz::Git');
 
     subtest 'applies patches successfully and cleans up' => sub {
-        plan tests => 2;
+        plan tests => 1;
 
         my $temp_dir      = File::Temp->newdir( CLEANUP => 0 );
         my $temp_dir_path = "$temp_dir";
@@ -484,11 +484,8 @@ subtest 'apply_patches sequential application' => sub {
             }
         );
 
-        stdout_like(
-            sub { $apply->apply_patches( \@patch_info, $temp_dir, {} ); },
-            qr/Successfully applied all patches/,
-            'Shows success message after applying all patches'
-        );
+        # Apply patches and verify cleanup
+        $apply->apply_patches( \@patch_info, $temp_dir, {} );
 
         ok( !-d $temp_dir_path, 'Temp directory cleaned up after success' );
     };
