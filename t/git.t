@@ -22,14 +22,32 @@ use Test::Exception;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Cwd qw(getcwd);
+use File::Temp qw(tempdir);
 
 BEGIN {
     use_ok('GitBz::Git');
 }
 
-# Change to test git repository
+# Create a temporary git repository for testing
 my $original_dir = getcwd();
-chdir "$FindBin::Bin/data/git_repo" or die "Cannot chdir to test repo: $!";
+my $test_repo = tempdir( CLEANUP => 1 );
+chdir $test_repo or die "Cannot chdir to test repo: $!";
+
+# Initialize git repo and create test commits
+GitBz::Git->run('init', '-q');
+GitBz::Git->run('config', 'user.email', 'test@example.com');
+GitBz::Git->run('config', 'user.name', 'Test User');
+
+# Create 4 commits for testing
+GitBz::Git->run('commit', '--allow-empty', '-q', '-m', 'Sample commit added');
+GitBz::Git->run('commit', '--allow-empty', '-q', '-m', 'Second test commit');
+GitBz::Git->run('commit', '--allow-empty', '-q', '-m', 'Third test commit');
+GitBz::Git->run('commit', '--allow-empty', '-q', '-m', 'Fourth test commit');
+
+# Get the hash of the second commit for testing
+my $second_commit = GitBz::Git->run('rev-parse', 'HEAD~2');
+chomp $second_commit;
+my $short_hash = substr($second_commit, 0, 7);
 
 END {
     chdir $original_dir if defined $original_dir;
@@ -79,17 +97,17 @@ subtest 'get_commits() tests' => sub {
     "GitBz::Exception::Git";
 
     # Test with a known commit from the test repository (using second commit which has a parent)
-    @commits = GitBz::Git->get_commits("a232c458fdec49418c9369ba2cf9d305264791f3");
+    @commits = GitBz::Git->get_commits($second_commit);
     is_deeply(
         \@commits,
-        [ { subject => q{Second test commit}, id => q{a232c458fdec49418c9369ba2cf9d305264791f3} } ],
+        [ { subject => q{Second test commit}, id => $second_commit } ],
         'Full hash returns correct commit and subject'
     );
 
-    @commits = GitBz::Git->get_commits("a232c45");
+    @commits = GitBz::Git->get_commits($short_hash);
     is_deeply(
         \@commits,
-        [ { subject => q{Second test commit}, id => q{a232c458fdec49418c9369ba2cf9d305264791f3} } ],
+        [ { subject => q{Second test commit}, id => $second_commit } ],
         'Short hash expands to full hash with correct subject'
     );
 
