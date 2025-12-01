@@ -21,9 +21,18 @@ use Test::More tests => 3;
 use Test::Exception;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
+use Cwd qw(getcwd);
 
 BEGIN {
     use_ok('GitBz::Git');
+}
+
+# Change to test git repository
+my $original_dir = getcwd();
+chdir "$FindBin::Bin/data/git_repo" or die "Cannot chdir to test repo: $!";
+
+END {
+    chdir $original_dir if defined $original_dir;
 }
 
 subtest 'run() tests' => sub {
@@ -69,16 +78,19 @@ subtest 'get_commits() tests' => sub {
     }
     "GitBz::Exception::Git";
 
-    @commits = GitBz::Git->get_commits("97e231b0c71938f2ff7ca16fec4bb1cec16c0abd");
+    # Test with a known commit from the test repository (using second commit which has a parent)
+    @commits = GitBz::Git->get_commits("a232c458fdec49418c9369ba2cf9d305264791f3");
     is_deeply(
         \@commits,
-        [ { subject => q{[#14] Fix inconsistent shebang}, id => q{97e231b0c71938f2ff7ca16fec4bb1cec16c0abd} } ]
+        [ { subject => q{Second test commit}, id => q{a232c458fdec49418c9369ba2cf9d305264791f3} } ],
+        'Full hash returns correct commit and subject'
     );
 
-    @commits = GitBz::Git->get_commits("97e231b");
+    @commits = GitBz::Git->get_commits("a232c45");
     is_deeply(
         \@commits,
-        [ { subject => q{[#14] Fix inconsistent shebang}, id => q{97e231b0c71938f2ff7ca16fec4bb1cec16c0abd} } ]
+        [ { subject => q{Second test commit}, id => q{a232c458fdec49418c9369ba2cf9d305264791f3} } ],
+        'Short hash expands to full hash with correct subject'
     );
 
     # reverse order
