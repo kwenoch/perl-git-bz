@@ -386,36 +386,36 @@ sub attach_patches {
 
         # Show bug field updates (for informational purposes)
         if ( $bug_updates{status} && $bug_updates{status} ne $bug->status ) {
-            print "  ✓ Status: " . $bug->status . " → $bug_updates{status}\n";
+            print "  Status: " . $bug->status . " → $bug_updates{status}\n";
         }
         if (   $bug_updates{cf_patch_complexity}
             && $bug_updates{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
         {
             my $old = $bug->cf_patch_complexity || '---';
-            print "  ✓ Patch-complexity: $old → $bug_updates{cf_patch_complexity}\n";
+            print "  Patch-complexity: $old → $bug_updates{cf_patch_complexity}\n";
         }
         if (   $bug_updates{cf_sponsors}
             && $bug_updates{cf_sponsors} ne ( $bug->cf_sponsors || '' ) )
         {
             my $old = $bug->cf_sponsors || '---';
-            print "  ✓ Sponsors: $old → $bug_updates{cf_sponsors}\n";
+            print "  Sponsors: $old → $bug_updates{cf_sponsors}\n";
         }
         if (   $bug_updates{cf_sponsorship}
             && $bug_updates{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
         {
             my $old = $bug->cf_sponsorship || '---';
-            print "  ✓ Sponsorship: $old → $bug_updates{cf_sponsorship}\n";
+            print "  Sponsorship: $old → $bug_updates{cf_sponsorship}\n";
         }
         if ( $bug_updates{comment} ) {
-            print "  ✓ Added comment\n";
+            print "  Comment: (added)\n";
         }
         if ( $bug_updates{depends_on} ) {
             my $depends_change = $bug_updates{depends_on};
             if ( $depends_change->{add} ) {
-                print "  ✓ Depends: added " . join( ' ', @{ $depends_change->{add} } ) . "\n";
+                print "  Depends: added " . join( ' ', @{ $depends_change->{add} } ) . "\n";
             }
             if ( $depends_change->{remove} ) {
-                print "  ✓ Depends: removed " . join( ' ', @{ $depends_change->{remove} } ) . "\n";
+                print "  Depends: removed " . join( ' ', @{ $depends_change->{remove} } ) . "\n";
             }
         }
 
