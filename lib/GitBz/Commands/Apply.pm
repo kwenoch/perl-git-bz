@@ -89,7 +89,7 @@ sub execute {
     # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
     # Command line flag takes precedence, then config, then default to 1
     unless ( defined $opts{verbose} ) {
-        my $config_verbose = GitBz::Config->get('bz.verbose', '1');
+        my $config_verbose = GitBz::Config->get( 'bz.verbose', '1' );
         chomp $config_verbose;
         $opts{verbose} = $config_verbose =~ /^\d+$/ ? $config_verbose : 1;
     }
@@ -134,9 +134,13 @@ sub apply_bug_with_dependencies {
 
     # Fetch bug if not already provided
     unless ($bug) {
-        $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
-            return GitBz::Bug->get( $client, $bug_ref );
-        });
+        $bug = GitBz::Progress::with_spinner(
+            "Fetching bug $bug_ref",
+            sub {
+                return GitBz::Bug->get( $client, $bug_ref );
+            },
+            1
+        );
     }
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
@@ -147,9 +151,13 @@ sub apply_bug_with_dependencies {
         for my $dep_id (@$dependencies) {
             next if grep { $_ eq $dep_id } @bugs_applied;
 
-            my $dep_bug = GitBz::Progress::with_spinner( "Checking dependency bug $dep_id", sub {
-                return GitBz::Bug->get( $client, $dep_id );
-            });
+            my $dep_bug = GitBz::Progress::with_spinner(
+                "Checking dependency bug $dep_id",
+                sub {
+                    return GitBz::Bug->get( $client, $dep_id );
+                },
+                1
+            );
             my $status = $dep_bug->status;
 
             # Only prompt for dependencies in relevant states
@@ -203,24 +211,25 @@ sub handle_git_am_state {
 
     # Check if we're in a git-am session
     my $git_dir = try {
-        my $dir = GitBz::Git->run('rev-parse', '--git-dir');
+        my $dir = GitBz::Git->run( 'rev-parse', '--git-dir' );
         chomp $dir;
         return $dir;
     } catch {
         GitBz::Exception->throw("Not inside a git repository");
     };
 
-    unless (-d "$git_dir/rebase-apply") {
+    unless ( -d "$git_dir/rebase-apply" ) {
         GitBz::Exception->throw("Not inside a 'git bz apply' operation");
     }
 
     # Check if this is a git-bz operation and get state
-    my ($has_state, $temp_dir, $remaining_patches) = $self->load_state($git_dir);
+    my ( $has_state, $temp_dir, $remaining_patches ) = $self->load_state($git_dir);
 
     if ( $opts->{abort} ) {
         GitBz::Git->run( 'am', '--abort' );
+
         # Clean up temp directory if it exists
-        if ($temp_dir && -d $temp_dir) {
+        if ( $temp_dir && -d $temp_dir ) {
             rmtree($temp_dir);
             print "\n✗ Aborted patch application and cleaned up temp files\n";
         } else {
@@ -231,13 +240,14 @@ sub handle_git_am_state {
         print "\n✓ Continued with current patch\n";
 
         # Continue with remaining patches if any
-        if ($remaining_patches && @$remaining_patches) {
+        if ( $remaining_patches && @$remaining_patches ) {
             print "\nContinuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n";
-            my $patch_info = $self->load_patch_info_from_temp($temp_dir, $remaining_patches);
-            $self->apply_patches($patch_info, $temp_dir, $opts);
+            my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
+            $self->apply_patches( $patch_info, $temp_dir, $opts );
         } else {
+
             # No remaining patches - just clean up
-            if ($temp_dir && -d $temp_dir) {
+            if ( $temp_dir && -d $temp_dir ) {
                 rmtree($temp_dir);
             }
         }
@@ -246,13 +256,14 @@ sub handle_git_am_state {
         print "\n⊘ Skipped current patch\n";
 
         # Continue with remaining patches if any
-        if ($remaining_patches && @$remaining_patches) {
+        if ( $remaining_patches && @$remaining_patches ) {
             print "\nContinuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n";
-            my $patch_info = $self->load_patch_info_from_temp($temp_dir, $remaining_patches);
-            $self->apply_patches($patch_info, $temp_dir, $opts);
+            my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
+            $self->apply_patches( $patch_info, $temp_dir, $opts );
         } else {
+
             # No remaining patches - just clean up
-            if ($temp_dir && -d $temp_dir) {
+            if ( $temp_dir && -d $temp_dir ) {
                 rmtree($temp_dir);
             }
         }
@@ -281,6 +292,7 @@ sub load_patch_info_from_temp {
     # Build patch_info for requested IDs
     my @patch_info;
     for my $patch_id (@$patch_ids) {
+
         # Find the patch file for this ID
         my ($patch_file) = grep { /-${patch_id}\.patch$/ } @all_files;
         unless ($patch_file) {
@@ -291,7 +303,7 @@ sub load_patch_info_from_temp {
         push @patch_info, {
             file    => "$temp_dir/$patch_file",
             id      => $patch_id,
-            summary => ''  # Summary not available when loading from temp
+            summary => ''                         # Summary not available when loading from temp
         };
     }
 
@@ -311,19 +323,27 @@ sub apply_bug_patches {
     my ( $self, $bug_ref, $opts, $bug ) = @_;
 
     # Fetch bug if not already provided
-    print "\n" if GitBz::Progress::get_verbosity() >= 2;  # Extra newline in verbose mode for readability
+    print "\n" if GitBz::Progress::get_verbosity() >= 2;    # Extra newline in verbose mode for readability
     unless ($bug) {
         my $client = $self->{commands}->{client};
-        $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
-            return GitBz::Bug->get( $client, $bug_ref );
-        });
+        $bug = GitBz::Progress::with_spinner(
+            "Fetching bug $bug_ref",
+            sub {
+                return GitBz::Bug->get( $client, $bug_ref );
+            },
+            1
+        );
     }
 
     GitBz::Exception->throw("Bug $bug_ref not found") unless $bug;
 
-    my $attachments = GitBz::Progress::with_spinner( "Fetching bug $bug_ref attachments", sub {
-        return $bug->attachments;
-    });
+    my $attachments = GitBz::Progress::with_spinner(
+        "Fetching bug $bug_ref attachments",
+        sub {
+            return $bug->attachments;
+        },
+        1
+    );
 
     # Filter for patch attachments
     my @patches;
@@ -365,7 +385,7 @@ sub apply_bug_patches {
     }
 
     # Convert attachments to patch files
-    my ( $temp_dir, $patch_info ) = $self->prepare_patch_files(\@selected_patches, $opts);
+    my ( $temp_dir, $patch_info ) = $self->prepare_patch_files( \@selected_patches, $opts );
 
     # Apply all patch files
     $self->apply_patches( $patch_info, $temp_dir, $opts );
@@ -480,8 +500,8 @@ sub save_state {
     }
 
     # Store remaining patch IDs in parseable format
-    if ($remaining_patch_ids && @$remaining_patch_ids) {
-        print $fh "remaining_patches=" . join(",", @$remaining_patch_ids) . "\n";
+    if ( $remaining_patch_ids && @$remaining_patch_ids ) {
+        print $fh "remaining_patches=" . join( ",", @$remaining_patch_ids ) . "\n";
     }
 
     close $fh;
@@ -500,27 +520,26 @@ sub load_state {
     my ( $self, $git_dir ) = @_;
 
     my $state_file = "$git_dir/rebase-apply/git-bz";
-    return (0, undef, undef) unless -f $state_file;
+    return ( 0, undef, undef ) unless -f $state_file;
 
     # Read state from file
-    open my $fh, '<', $state_file or return (1, undef, undef);
+    open my $fh, '<', $state_file or return ( 1, undef, undef );
     my $temp_dir;
     my @remaining_patches;
 
-    while (my $line = <$fh>) {
-        if ($line =~ /^temp_dir=(.+)$/) {
+    while ( my $line = <$fh> ) {
+        if ( $line =~ /^temp_dir=(.+)$/ ) {
             $temp_dir = $1;
             chomp $temp_dir;
-        }
-        elsif ($line =~ /^remaining_patches=(.+)$/) {
+        } elsif ( $line =~ /^remaining_patches=(.+)$/ ) {
             my $patches_str = $1;
             chomp $patches_str;
-            @remaining_patches = split(/,/, $patches_str);
+            @remaining_patches = split( /,/, $patches_str );
         }
     }
     close $fh;
 
-    return (1, $temp_dir, \@remaining_patches);
+    return ( 1, $temp_dir, \@remaining_patches );
 }
 
 =head2 prepare_patch_files
@@ -555,7 +574,7 @@ sub prepare_patch_files {
         close $fh;
 
         # Show progress based on verbosity level
-        my $counter = sprintf("[%d/%d]", $i + 1, scalar(@$attachments));
+        my $counter = sprintf( "[%d/%d]", $i + 1, scalar(@$attachments) );
         GitBz::Progress::update_progress_line("$counter Preparing $att->{summary}");
 
         push @patch_info, {
@@ -583,7 +602,7 @@ patch_info is array of hashrefs with {file => path, id => att_id, summary => att
 sub apply_patches {
     my ( $self, $patch_info, $temp_dir, $opts ) = @_;
 
-    my $git_dir = GitBz::Git->run('rev-parse', '--git-dir');
+    my $git_dir = GitBz::Git->run( 'rev-parse', '--git-dir' );
     chomp $git_dir;
 
     # Level 0 (quiet): skip header, Level 1+: show header
@@ -594,7 +613,7 @@ sub apply_patches {
         my $info = $patch_info->[$i];
 
         # Apply this patch with 3-way merge for better conflict resolution
-        my @git_am_args = ('am', '-3');
+        my @git_am_args = ( 'am', '-3' );
         push @git_am_args, '--signoff' if $opts->{signoff};
         push @git_am_args, $info->{file};
 
@@ -602,21 +621,23 @@ sub apply_patches {
             GitBz::Git->run(@git_am_args);
 
             # Show progress after successful application
-            my $counter = sprintf("[%d/%d]", $i + 1, scalar(@$patch_info));
+            my $counter = sprintf( "[%d/%d]", $i + 1, scalar(@$patch_info) );
             my $summary = $info->{summary} || "patch $info->{id}";
             GitBz::Progress::update_progress_line("$counter Applied $summary");
         } catch {
             $failed = 1;
+
             # If git-am failed and saved its state, save our state too
-            if (-d "$git_dir/rebase-apply") {
+            if ( -d "$git_dir/rebase-apply" ) {
+
                 # Clear any progress line before printing error (only at level 1)
-                if (GitBz::Progress::get_verbosity() == 1 && -t STDOUT) {
+                if ( GitBz::Progress::get_verbosity() == 1 && -t STDOUT ) {
                     print "\r\e[K";
                 }
 
                 # Save which patches remain to be applied
-                my @remaining_patch_ids = map { $patch_info->[$_]->{id} } (($i + 1) .. $#$patch_info);
-                $self->save_state($git_dir, $temp_dir, \@remaining_patch_ids);
+                my @remaining_patch_ids = map { $patch_info->[$_]->{id} } ( ( $i + 1 ) .. $#$patch_info );
+                $self->save_state( $git_dir, $temp_dir, \@remaining_patch_ids );
 
                 print STDERR "\n";
                 my $summary_msg = $info->{summary} ? " - $info->{summary}" : "";

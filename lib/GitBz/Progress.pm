@@ -161,15 +161,17 @@ Stop an animated spinner and show completion status.
 
     GitBz::Progress::stop_spinner($spinner, "success");
     GitBz::Progress::stop_spinner($spinner, "error", "Connection failed");
+    GitBz::Progress::stop_spinner($spinner, "success", undef, 1);  # clear on success
 
 First parameter: spinner object from start_spinner()
 Second parameter: "success" or "error"
 Third parameter (optional): custom message
+Fourth parameter (optional): clear_on_success (1 = clear line after success)
 
 =cut
 
 sub stop_spinner {
-    my ( $spinner_obj, $status, $custom_message ) = @_;
+    my ( $spinner_obj, $status, $custom_message, $clear_on_success ) = @_;
 
     my $message = $custom_message || $spinner_obj->{message};
 
@@ -183,18 +185,22 @@ sub stop_spinner {
 
         # Not a terminal, just print status
         if ( $status eq 'success' ) {
-            print " " . colored( ['green'], '✓' ) . "\n";
+            print " " . colored( ['green'], '✓' ) . "\n" unless $clear_on_success;
         } else {
             print " " . colored( ['red'], '✗' ) . "\n";
         }
         return;
     }
 
-    # For terminal: clear the line and print final status
+    # For terminal: clear the line
     print "\r\e[K";
 
     if ( $status eq 'success' ) {
-        print colored( ['green'], '  ✓ ' ) . "$message\n";
+
+        # If clear_on_success, just clear the line and don't print anything
+        unless ($clear_on_success) {
+            print colored( ['green'], '  ✓ ' ) . "$message\n";
+        }
     } else {
         print colored( ['red'], '  ✗ ' ) . "$message\n";
     }
@@ -276,14 +282,22 @@ Uses global verbosity level to determine whether to show the spinner.
         return $data;
     });
 
+    # Clear line on success (for operational steps)
+    my $result = GitBz::Progress::with_spinner("Fetching bug", sub {
+        # ... do work ...
+        return $data;
+    }, 1);
+
 Returns the return value from the code block.
 If the code throws an exception, the spinner is stopped with error status
 and the exception is re-thrown.
 
+Third parameter (optional): clear_on_success (1 = clear line after success)
+
 =cut
 
 sub with_spinner {
-    my ( $message, $code ) = @_;
+    my ( $message, $code, $clear_on_success ) = @_;
 
     # Level 0: quiet mode, just execute without spinner
     if ( $VERBOSITY == 0 ) {
@@ -305,7 +319,7 @@ sub with_spinner {
         die $error;
     }
 
-    stop_spinner( $spinner, 'success' );
+    stop_spinner( $spinner, 'success', undef, $clear_on_success );
     return $result;
 }
 
@@ -332,6 +346,7 @@ sub update_progress_line {
     if ( $VERBOSITY >= 2 || !$is_tty ) {
         print "  ✓ $message\n";
     } else {
+
         # Level 1 with TTY: clear line and print new status
         print "\r\e[K";
         print colored( ['green'], '  ✓ ' ) . "$message";

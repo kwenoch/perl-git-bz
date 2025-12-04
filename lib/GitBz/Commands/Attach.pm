@@ -76,9 +76,21 @@ sub execute {
 
     GetOptionsFromArray(
         \@args,
-        'edit|e' => \$opts{edit},
-        'yes|y'  => \$opts{yes},
+        'edit|e'    => \$opts{edit},
+        'yes|y'     => \$opts{yes},
+        'verbose=i' => \$opts{verbose},
     ) or GitBz::Exception->throw("Invalid options");
+
+    # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
+    # Command line flag takes precedence, then config, then default to 1
+    unless ( defined $opts{verbose} ) {
+        my $config_verbose = GitBz::Config->get( 'bz.verbose', '1' );
+        chomp $config_verbose;
+        $opts{verbose} = $config_verbose =~ /^\d+$/ ? $config_verbose : 1;
+    }
+
+    # Set global verbosity for Progress module
+    GitBz::Progress::set_verbosity( $opts{verbose} );
 
     return try {
         my ( $bug_ref, $commit_range ) = $self->parse_args(@args);
@@ -336,9 +348,13 @@ sub attach_patches {
     my $client = $self->{client};
 
     # Fetch bug with spinner
-    my $bug = GitBz::Progress::with_spinner( "Fetching bug $bug_ref", sub {
-        return GitBz::Bug->get( $client, $bug_ref );
-    });
+    my $bug = GitBz::Progress::with_spinner(
+        "Fetching bug $bug_ref",
+        sub {
+            return GitBz::Bug->get( $client, $bug_ref );
+        },
+        1
+    );
 
     # Preflight checks
     $self->preflight_checks( $bug_ref, $commits );
@@ -366,7 +382,7 @@ sub attach_patches {
     # Show progress header
     print "\nUploading " . scalar(@$commits) . " patch(es):\n";
 
-    my $patch_num    = 0;
+    my $patch_num     = 0;
     my $total_patches = scalar(@$commits);
 
     for my $commit (@$commits) {
@@ -375,13 +391,13 @@ sub attach_patches {
         my $description = $commit->{subject};
 
         # Show progress counter
-        my $counter = GitBz::Progress::progress_counter($patch_num, $total_patches);
+        my $counter = GitBz::Progress::progress_counter( $patch_num, $total_patches );
 
         # Generate patch with spinner
         my $spinner = GitBz::Progress::start_spinner("$counter Generating $filename");
-        my $patch = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
-        my $body  = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
-        GitBz::Progress::stop_spinner($spinner, 'success');
+        my $patch   = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
+        my $body    = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
+        GitBz::Progress::stop_spinner( $spinner, 'success' );
 
         my $comment = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
 
@@ -398,13 +414,13 @@ sub attach_patches {
         };
 
         if ($@) {
-            GitBz::Progress::stop_spinner($spinner, 'error');
+            GitBz::Progress::stop_spinner( $spinner, 'error' );
             GitBz::Progress::print_error("Failed to attach: $description");
             print "    Error: $@\n";
             return;    # Skip remaining steps
         }
 
-        GitBz::Progress::stop_spinner($spinner, 'success', "Attached: $description");
+        GitBz::Progress::stop_spinner( $spinner, 'success', "Attached: $description" );
     }
 
     # Show bug field updates and obsoletes
@@ -450,7 +466,7 @@ sub attach_patches {
         if (%bug_updates) {
             my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
             $bug->update(%bug_updates);
-            GitBz::Progress::stop_spinner($spinner, 'success', "Bug fields updated");
+            GitBz::Progress::stop_spinner( $spinner, 'success', "Bug fields updated" );
         }
 
         # Perform obsoletes with real-time feedback
@@ -462,7 +478,7 @@ sub attach_patches {
                 my $summary = $attach_lookup{$attach_id} || "Unknown";
                 my $spinner = GitBz::Progress::start_spinner("Obsoleting attachment $attach_id");
                 $bug->obsolete_attachment($attach_id);
-                GitBz::Progress::stop_spinner($spinner, 'success', "Obsoleted: $summary");
+                GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
             }
         }
     }
@@ -567,9 +583,13 @@ sub edit_bug_updates {
     $template .= "# Add optional bug comment below (leave empty for no comment):\n\n\n";
 
     # Show existing patches for obsoleting
-    my $attachments = GitBz::Progress::with_spinner( "Fetching attachments", sub {
-        return $bug->attachments;
-    });
+    my $attachments = GitBz::Progress::with_spinner(
+        "Fetching attachments",
+        sub {
+            return $bug->attachments;
+        },
+        1
+    );
     if ( $attachments && @$attachments ) {
 
         # Build list of commit subjects for matching
@@ -597,9 +617,13 @@ sub edit_bug_updates {
     # Add patch complexity options
     my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
-    my $complexity_values = GitBz::Progress::with_spinner( "Fetching field values", sub {
-        return $client->get_field_values('cf_patch_complexity');
-    });
+    my $complexity_values = GitBz::Progress::with_spinner(
+        "Fetching field values",
+        sub {
+            return $client->get_field_values('cf_patch_complexity');
+        },
+        1
+    );
     if ($complexity_values) {
         for my $comp (@$complexity_values) {
             $template .= "# Patch-complexity: $comp\n";
@@ -614,19 +638,21 @@ sub edit_bug_updates {
     # Build proposed sponsors list from current + commits
     my %proposed_sponsors;
     if ($current_sponsors) {
+
         # Split existing sponsors by comma and trim whitespace
-        for my $sponsor (split /,/, $current_sponsors) {
+        for my $sponsor ( split /,/, $current_sponsors ) {
             $sponsor =~ s/^\s+|\s+$//g;
             $proposed_sponsors{$sponsor} = 1 if $sponsor;
         }
     }
+
     # Add sponsors from commits
-    for my $sponsor (sort keys %all_sponsors) {
+    for my $sponsor ( sort keys %all_sponsors ) {
         $proposed_sponsors{$sponsor} = 1;
     }
 
     if (%proposed_sponsors) {
-        my $sponsors_str = join(', ', sort keys %proposed_sponsors);
+        my $sponsors_str = join( ', ', sort keys %proposed_sponsors );
         $template .= "Sponsors: $sponsors_str\n";
     } else {
         $template .= "# Sponsors: Sponsor One, Sponsor Two\n";
