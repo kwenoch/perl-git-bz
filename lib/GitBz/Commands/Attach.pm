@@ -100,7 +100,8 @@ sub execute {
 
         $self->attach_patches( $bug_ref, \@commits, \%opts );
 
-        print "\n✓ Successfully attached " . scalar(@commits) . " patch(es) to bug $bug_ref\n";
+        my $patch_word = @commits == 1 ? "patch" : "patches";
+        print "\n✓ Successfully attached " . scalar(@commits) . " $patch_word to bug $bug_ref\n";
     } catch {
         GitBz::Exception->throw("Attach failed: $_");
     };
@@ -379,53 +380,9 @@ sub attach_patches {
         @obsoletes_list = $self->find_trivial_obsoletes( $bug, $commits, $opts->{yes} );
     }
 
-    # Show progress header
-    print "\nUploading " . scalar(@$commits) . " patch(es):\n";
-
-    my $patch_num     = 0;
-    my $total_patches = scalar(@$commits);
-
-    for my $commit (@$commits) {
-        $patch_num++;
-        my $filename    = sprintf( "%s.patch", substr( $commit->{id}, 0, 7 ) );
-        my $description = $commit->{subject};
-
-        # Show progress counter
-        my $counter = GitBz::Progress::progress_counter( $patch_num, $total_patches );
-
-        # Generate patch with spinner
-        my $spinner = GitBz::Progress::start_spinner("$counter Generating $filename");
-        my $patch   = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
-        my $body    = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
-        GitBz::Progress::stop_spinner( $spinner, 'success' );
-
-        my $comment = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
-
-        # Upload patch with spinner
-        $spinner = GitBz::Progress::start_spinner("$counter Uploading: $description");
-
-        eval {
-            $bug->add_attachment(
-                $patch,
-                $filename,
-                $description,
-                comment => $comment,
-            );
-        };
-
-        if ($@) {
-            GitBz::Progress::stop_spinner( $spinner, 'error' );
-            GitBz::Progress::print_error("Failed to attach: $description");
-            print "    Error: $@\n";
-            return;    # Skip remaining steps
-        }
-
-        GitBz::Progress::stop_spinner( $spinner, 'success', "Attached: $description" );
-    }
-
-    # Show bug field updates and obsoletes
+    # Apply bug updates BEFORE uploading patches
     if ( %bug_updates || @obsoletes_list ) {
-        print "\nApplying bug updates:\n";
+        print "\nUpdating bug:\n";
 
         # Show bug field updates (for informational purposes)
         if ( $bug_updates{status} && $bug_updates{status} ne $bug->status ) {
@@ -434,19 +391,19 @@ sub attach_patches {
         if (   $bug_updates{cf_patch_complexity}
             && $bug_updates{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
         {
-            my $old = $bug->cf_patch_complexity || 'none';
+            my $old = $bug->cf_patch_complexity || '---';
             print "  ✓ Patch-complexity: $old → $bug_updates{cf_patch_complexity}\n";
         }
         if (   $bug_updates{cf_sponsors}
             && $bug_updates{cf_sponsors} ne ( $bug->cf_sponsors || '' ) )
         {
-            my $old = $bug->cf_sponsors || 'none';
+            my $old = $bug->cf_sponsors || '---';
             print "  ✓ Sponsors: $old → $bug_updates{cf_sponsors}\n";
         }
         if (   $bug_updates{cf_sponsorship}
             && $bug_updates{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
         {
-            my $old = $bug->cf_sponsorship || 'none';
+            my $old = $bug->cf_sponsorship || '---';
             print "  ✓ Sponsorship: $old → $bug_updates{cf_sponsorship}\n";
         }
         if ( $bug_updates{comment} ) {
@@ -483,7 +440,50 @@ sub attach_patches {
         }
     }
 
-    # Obsoletes are now handled in the unified update section above
+    # Show progress header
+    my $patch_word = @$commits == 1 ? "patch" : "patches";
+    print "\nUploading " . scalar(@$commits) . " $patch_word:\n";
+
+    my $patch_num     = 0;
+    my $total_patches = scalar(@$commits);
+
+    for my $commit (@$commits) {
+        $patch_num++;
+        my $filename    = sprintf( "%s.patch", substr( $commit->{id}, 0, 7 ) );
+        my $description = $commit->{subject};
+
+        # Show progress counter
+        my $counter = GitBz::Progress::progress_counter( $patch_num, $total_patches );
+
+        # Generate patch with spinner
+        my $spinner = GitBz::Progress::start_spinner("$counter Generating $filename");
+        my $patch   = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
+        my $body    = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
+        GitBz::Progress::stop_spinner( $spinner, 'success', undef, 1 );
+
+        my $comment = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
+
+        # Upload patch with spinner
+        $spinner = GitBz::Progress::start_spinner("$counter Uploading: $description");
+
+        eval {
+            $bug->add_attachment(
+                $patch,
+                $filename,
+                $description,
+                comment => $comment,
+            );
+        };
+
+        if ($@) {
+            GitBz::Progress::stop_spinner( $spinner, 'error' );
+            GitBz::Progress::print_error("Failed to attach: $description");
+            print "    Error: $@\n";
+            return;    # Skip remaining steps
+        }
+
+        GitBz::Progress::stop_spinner( $spinner, 'success', "Attached: $description" );
+    }
 }
 
 =head2 find_trivial_obsoletes
