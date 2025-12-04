@@ -61,19 +61,65 @@ Based on Koha Bugzilla workflow rules.
 sub get_next_status_values {
     my ( $self, $current_status ) = @_;
 
-    # Koha Bugzilla workflow transitions
+    # Koha Bugzilla workflow transitions (from REST API)
     my %transitions = (
-        'NEW'                  => [ 'ASSIGNED',         'Needs Signoff', 'RESOLVED' ],
-        'ASSIGNED'             => [ 'Needs Signoff',    'RESOLVED' ],
-        'Needs Signoff'        => [ 'Signed Off',       'Failed QA', 'RESOLVED' ],
-        'Signed Off'           => [ 'Passed QA',        'Failed QA', 'RESOLVED' ],
-        'Failed QA'            => [ 'Needs Signoff',    'RESOLVED' ],
-        'Passed QA'            => [ 'Pushed to Master', 'Pushed to Stable', 'RESOLVED' ],
-        'Pushed to Master'     => ['RESOLVED'],
-        'Pushed to Stable'     => ['RESOLVED'],
-        'RESOLVED'             => ['REOPENED'],
-        'REOPENED'             => [ 'ASSIGNED', 'Needs Signoff', 'RESOLVED' ],
-        'Patch doesn\'t apply' => [ 'ASSIGNED', 'RESOLVED', 'BLOCKED', 'In Discussion', 'Needs Signoff', 'Signed Off', 'Passed QA', 'Failed QA' ],
+        'UNCONFIRMED' => [ 'NEW', 'RESOLVED' ],
+        'REOPENED'    =>
+            [ 'NEW', 'ASSIGNED', 'In Discussion', 'Needs Signoff', 'Needs documenting', 'RESOLVED', 'BLOCKED' ],
+        'NEW' => [
+            'CONFIRMED', 'ASSIGNED', 'In Discussion', 'Needs Signoff', 'Needs documenting', 'RESOLVED', 'CLOSED',
+            'BLOCKED'
+        ],
+        'CONFIRMED' => [ 'ASSIGNED', 'In Discussion', 'Needs Signoff', 'RESOLVED' ],
+        'ASSIGNED'  => [
+            'CONFIRMED',            'In Discussion', 'Needs Signoff', 'Signed Off', 'Passed QA', 'Failed QA',
+            'Patch doesn\'t apply', 'RESOLVED',      'BLOCKED'
+        ],
+        'In Discussion' => [
+            'CONFIRMED', 'ASSIGNED', 'Needs Signoff', 'Signed Off', 'Passed QA', 'Failed QA', 'Patch doesn\'t apply',
+            'Needs documenting', 'RESOLVED', 'BLOCKED'
+        ],
+        'Needs Signoff' =>
+            [ 'ASSIGNED', 'In Discussion', 'Signed Off', 'Failed QA', 'Patch doesn\'t apply', 'RESOLVED', 'BLOCKED' ],
+        'Signed Off' => [
+            'ASSIGNED', 'In Discussion', 'Needs Signoff', 'Passed QA', 'Failed QA', 'Patch doesn\'t apply', 'RESOLVED',
+            'BLOCKED'
+        ],
+        'Passed QA' => [
+            'ASSIGNED',       'In Discussion',    'Needs Signoff', 'Signed Off', 'Failed QA', 'Patch doesn\'t apply',
+            'Pushed to main', 'Pushed to stable', 'Pushed to oldstable', 'Pushed to oldoldstable', 'RESOLVED', 'BLOCKED'
+        ],
+        'Failed QA' => [
+            'ASSIGNED', 'In Discussion', 'Needs Signoff', 'Signed Off', 'Passed QA', 'Patch doesn\'t apply',
+            'RESOLVED', 'BLOCKED'
+        ],
+        'Patch doesn\'t apply' => [
+            'ASSIGNED', 'In Discussion', 'Needs Signoff', 'Signed Off', 'Passed QA', 'Failed QA', 'RESOLVED', 'BLOCKED'
+        ],
+        'Pushed to main' => [
+            'ASSIGNED', 'Passed QA', 'Failed QA', 'Pushed to stable', 'Needs documenting', 'RESOLVED', 'CLOSED',
+            'BLOCKED'
+        ],
+        'Pushed to stable' =>
+            [ 'ASSIGNED', 'Pushed to oldstable', 'Needs documenting', 'RESOLVED', 'CLOSED', 'BLOCKED' ],
+        'Pushed to oldstable' =>
+            [ 'ASSIGNED', 'Pushed to oldoldstable', 'Needs documenting', 'RESOLVED', 'CLOSED', 'BLOCKED' ],
+        'Pushed to oldoldstable' =>
+            [ 'ASSIGNED', 'Pushed to oldoldoldstable', 'Needs documenting', 'RESOLVED', 'CLOSED', 'BLOCKED' ],
+        'Pushed to oldoldoldstable' => [ 'ASSIGNED', 'Needs documenting', 'RESOLVED', 'CLOSED', 'BLOCKED' ],
+        'Needs documenting'         => [
+            'Pushed to main',            'Pushed to stable', 'Pushed to oldstable', 'Pushed to oldoldstable',
+            'Pushed to oldoldoldstable', 'RESOLVED',         'CLOSED'
+        ],
+        'RESOLVED' => [ 'UNCONFIRMED', 'REOPENED', 'Needs documenting', 'CLOSED',    'BLOCKED' ],
+        'VERIFIED' => [ 'UNCONFIRMED', 'REOPENED', 'Failed QA', 'Needs documenting', 'RESOLVED', 'CLOSED', 'BLOCKED' ],
+        'CLOSED'   => [ 'UNCONFIRMED', 'REOPENED', 'Needs documenting', 'RESOLVED',  'BLOCKED' ],
+        'BLOCKED'  => [
+            'UNCONFIRMED', 'REOPENED',  'NEW', 'CONFIRMED', 'ASSIGNED', 'In Discussion', 'Needs Signoff', 'Signed Off',
+            'Passed QA',   'Failed QA', 'Patch doesn\'t apply', 'Pushed to main', 'Pushed to stable',
+            'Pushed to oldstable', 'Pushed to oldoldstable', 'Pushed to oldoldoldstable', 'Needs documenting',
+            'RESOLVED',            'CLOSED'
+        ],
     );
 
     return $transitions{$current_status} || [];
