@@ -1,7 +1,7 @@
 # git-bz
 
-[![pipeline status](https://gitlab.com/koha-community/git-bz/badges/main/pipeline.svg)](https://gitlab.com/koha-community/git-bz/-/commits/main)
-[![Latest Release](https://gitlab.com/koha-community/git-bz/-/badges/release.svg)](https://gitlab.com/koha-community/git-bz/-/releases)
+[![pipeline status](https://gitlab.com/koha-community/perl-git-bz/badges/main/pipeline.svg)](https://gitlab.com/koha-community/perl-git-bz/-/commits/main)
+[![Latest Release](https://gitlab.com/koha-community/perl-git-bz/-/badges/release.svg)](https://gitlab.com/koha-community/perl-git-bz/-/releases)
 
 A command-line tool for integrating Git workflows with Bugzilla bug tracking. Designed for the Koha project development workflow, git-bz streamlines the process of applying patches from bugs, attaching commits as patches, and managing bug metadata directly from your terminal.
 
