@@ -1,15 +1,17 @@
-# git-bz-perl
+# git-bz
 
-A Perl implementation of git-bz for Koha development workflow using Bugzilla's REST API.
+A command-line tool for integrating Git workflows with Bugzilla bug tracking. Designed for the Koha project development workflow, git-bz streamlines the process of applying patches from bugs, attaching commits as patches, and managing bug metadata directly from your terminal.
 
 ## Features
 
-- **REST API Integration**: Uses Bugzilla's modern REST API
-- **Exception Handling**: Structured exception hierarchy  
-- **OO Design**: Clean object-oriented architecture
-- **Git Integration**: Seamless git workflow integration
-- **Dependency Cascading**: Automatically handles bug dependencies
-- **UTF-8 Support**: Proper handling of non-ASCII characters in commit messages
+- **Apply patches from bugs** - Download and apply patches with automatic dependency resolution
+- **Attach commits as patches** - Upload Git commits as Bugzilla attachments
+- **Edit bug metadata** - Update bug status, complexity, sponsors, and dependencies
+- **Dependency cascading** - Automatically follow and apply dependent bugs
+- **Smart obsoletes** - Auto-detect patches to obsolete based on commit subjects
+- **UTF-8 support** - Proper handling of international characters
+- **Secure credentials** - Integration with Git credential helpers
+- **REST API** - Uses Bugzilla's modern REST API
 
 ## Installation
 
@@ -17,137 +19,274 @@ A Perl implementation of git-bz for Koha development workflow using Bugzilla's R
 # Install dependencies
 cpanm --installdeps .
 
-# Add to your shell configuration for persistent access
-echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc  # For bash
-echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.zshrc   # For zsh
-
-# Reload your shell configuration
-source ~/.bashrc  # For bash
-source ~/.zshrc   # For zsh
+# Add to PATH (adjust path to match your clone location)
+echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
 ```
-
-**Note:** Adjust the path (`$HOME/git/perl-git-bz/bin`) to match where you cloned the repository.
 
 ## Configuration
 
-### Standard Setup
+### Basic Setup
 
 ```bash
 # Set default Bugzilla tracker
 git config bz.default-tracker bugs.koha-community.org
 
-# Set credentials
+# Set credentials (choose one method)
+
+# Method 1: Direct configuration
 git config bz-tracker.bugs.koha-community.org.bz-user your-email@example.com
 git config bz-tracker.bugs.koha-community.org.bz-password your-password
-```
 
-### Alternative: Environment Variables
-
-```bash
+# Method 2: Environment variables
 export BUGZILLA_USER=your-email@example.com
 export BUGZILLA_PASSWORD=your-password
-```
 
-### Optional: Git Credential Helper (Enhanced Security)
-
-For secure credential management using git's credential system:
-
-```bash
-# Enable git credential integration
+# Method 3: Git credential helper (recommended for security)
 git config bz-tracker.bugs.koha-community.org.use-git-credential true
-
-# Configure credential helper (choose one):
-git config --global credential.helper osxkeychain           # macOS (secure)
-git config --global credential.helper libsecret             # Linux (secure) 
-git config --global credential.helper manager-core         # Windows (secure)
-git config --global credential.helper store                 # Cross-platform (plaintext)
-
-# Set username for the tracker
+git config --global credential.helper osxkeychain  # macOS
+# or: libsecret (Linux), manager-core (Windows), store (cross-platform)
 git config --global credential.https://bugs.koha-community.org.username your-email@example.com
 ```
 
-**Benefits:** Secure encrypted storage, unified credential management, automatic approval/rejection feedback to help credential helpers learn from login attempts.
-
-### Verbosity Control
-
-Control the amount of progress output displayed:
+### Optional Settings
 
 ```bash
-# Set default verbosity level (0=quiet, 1=default, 2=verbose)
+# Control verbosity (0=quiet, 1=default, 2=verbose)
 git config bz.verbose 1
-
-# Level 0: Minimal output (only essential messages)
-# Level 1: Default (spinners and line-replacement progress)
-# Level 2: Verbose (detailed step-by-step output)
 ```
 
-## Usage
+## Commands
+
+### apply - Apply patches from bugs
+
+Downloads and applies patches from a Bugzilla bug to your current branch.
 
 ```bash
-# Apply patches from a bug (with dependency resolution)
+git bz apply <bug-id>
+git bz apply [options] <bug-id>
+```
+
+**Options:**
+- `-v, --verbose` - Increase verbosity (can be repeated: -vv)
+- `--continue` - Continue after resolving conflicts
+- `--skip` - Skip current patch and continue
+- `--abort` - Abort the apply operation
+
+**Features:**
+- Interactive patch selection
+- Automatic dependency detection and resolution
+- Prompts to apply dependent bugs first
+- Handles git-am workflow (continue/skip/abort)
+- Filters dependencies by relevant statuses
+
+**Example:**
+```bash
+# Apply all patches from bug 38224
 git bz apply 38224
 
-# Apply patches with verbose output
+# Apply with verbose output
 git bz apply -vv 38224
 
-# Apply patches in quiet mode
-git bz apply 38224  # with git config bz.verbose 0
+# Continue after resolving conflicts
+git bz apply --continue
+```
 
-# Attach commits as patches to a bug
+### attach - Attach commits as patches
+
+Uploads Git commits as patch attachments to a Bugzilla bug.
+
+```bash
+git bz attach [options] [<bug-id>] <commit-range>
+```
+
+**Options:**
+- `-e, --edit` - Edit bug metadata before attaching
+- `-y, --yes` - Skip confirmation prompts
+- `-v, --verbose` - Increase verbosity
+
+**Behavior:**
+
+| Mode | Bug Metadata | Attachment Comments | Bug Comment | Obsoletes |
+|------|--------------|---------------------|-------------|-----------|
+| **Standard** | No changes | Commit message per patch | None | Auto-detect only |
+| **Edit (-e)** | Interactive form | Commit message per patch | Optional | Interactive selection |
+
+**Standard Mode:**
+- Each commit becomes a separate attachment
+- Attachment description = commit subject
+- Attachment comment = full commit message
+- Auto-detects patches to obsolete (matching subjects)
+- No user interaction required
+
+**Edit Mode (-e):**
+- Opens interactive template for bug-level updates
+- Update status, patch complexity, sponsors, sponsorship, dependencies
+- Add optional bug-level comment (separate from attachment comments)
+- Select patches to obsolete
+- All updates applied in single API call
+
+**Examples:**
+```bash
+# Attach last 2 commits (extracts bug ID from commit message)
+git bz attach HEAD~2..HEAD
+
+# Attach to specific bug
 git bz attach 12345 HEAD~2..HEAD
 
-# Attach with interactive editing of bug fields
+# Attach with interactive editing
 git bz attach -e 12345 HEAD~2..HEAD
 
 # Skip confirmation prompts
 git bz attach -y 12345 HEAD
-
-# Edit a bug directly
-git bz edit 12345
-
-# Edit bugs referenced in commits
-git bz edit HEAD~2..HEAD
 ```
 
-## Attach Command Behavior
+### edit - Edit bug metadata
 
-The `attach` command provides flexible patch attachment with optional bug field editing:
+Opens an interactive template to update bug fields and add comments.
 
-### Standard Mode
-- Each commit becomes an attachment with the commit message as the attachment comment
-- Attachment description uses the commit subject line
-- No user interaction required
+```bash
+git bz edit <bug-id>
+git bz edit <commit>
+git bz edit <revision-range>
+```
 
-### Edit Mode (`-e` flag)
-- Shows an interactive form for bug-level updates
-- Each attachment still gets the original commit message as comment
-- Allows adding optional bug-level comment (separate from attachment comments)
-- Supports updating bug status, patch complexity, dependencies
-- Smart detection of patches to obsolete based on commit subjects
-- All bug updates happen in a single API call after attachments
+**Editable Fields:**
+- Status (with workflow validation)
+- Resolution
+- Patch complexity
+- Sponsors (one per line, add/remove tracking)
+- Sponsorship status
+- Dependencies (add/remove tracking)
+- Comments
+- Obsolete attachments
 
-### Benefits
-- **Predictable**: Each commit always becomes an attachment with its original message
-- **Separated concerns**: Attachment comments vs bug-level comments are distinct
-- **UTF-8 safe**: Proper encoding handling for international characters
-- **Bulk operations**: Edit mode works across multiple commits efficiently
+**Features:**
+- Smart field validation
+- Auto-updates sponsorship status when adding sponsors
+- Displays changes in formatted table before applying
+- Extracts bug IDs from commit messages
 
-## Dependency Cascading
+**Examples:**
+```bash
+# Edit bug directly
+git bz edit 12345
 
-When applying a bug with `git bz apply`, the tool automatically:
+# Edit bugs from commits
+git bz edit HEAD~2..HEAD
 
-1. **Detects dependencies**: Checks the bug's `depends_on` field
-2. **Filters by status**: Only prompts for dependencies in applicable states:
-   - Needs Signoff, Signed Off, Failed QA, Passed QA, BLOCKED
-3. **Prompts user**: "Bug X depends on bug Y (Status). Follow? [(y)es, (n)o]"
-4. **Applies recursively**: If user chooses yes, applies dependency first
-5. **Tracks applied bugs**: Prevents duplicate applications in dependency chains
+# Edit bug from single commit
+git bz edit HEAD
+```
 
-This ensures patches are applied in the correct dependency order automatically.
+### open - Open bug in browser
 
-## Commands
+Opens the bug in your default web browser.
 
-- `apply` - Apply patches from a bug with dependency resolution ✅
-- `attach` - Attach commits as patches to a bug ✅  
-- `edit` - Edit bug details and add comments ✅
-- `open` - Open bug in default web browser ✅
+```bash
+git bz open <bug-id>
+```
+
+**Example:**
+```bash
+git bz open 12345
+```
+
+*NOTE:* Requires `xdg-open` (Linux), `open` (macOS), or `start` (Windows) to be available in PATH.
+As such, is won't work within the **KTD** shell.
+
+## Workflow Examples
+
+### Applying patches from a bug
+
+```bash
+# Apply patches with dependency resolution
+git bz apply 38224
+
+# If dependencies exist, you'll be prompted:
+# "Bug 38224 depends on bug 38100 (Needs Signoff). Follow? [(y)es, (n)o]"
+
+# Select patches interactively or apply all
+# Patches are applied using git-am
+```
+
+### Attaching your work
+
+```bash
+# Make your commits
+git commit -m "Bug 12345: Add regression tests"
+git commit -m "Bug 12345: Fix the thing"
+
+# Attach commits (extracts bug ID from messages)
+git bz attach HEAD~2..
+
+# Or attach with metadata updates
+git bz attach -e 12345 HEAD~2..
+```
+
+### Updating bug metadata
+
+```bash
+# Edit bug fields
+git bz edit 12345
+
+# Template opens with current values:
+# - Uncomment desired status
+# - Add/remove sponsors (one per line)
+# - Add/remove dependencies
+# - Add comment
+# - Select patches to obsolete
+
+# Changes displayed in table before applying
+```
+
+## Field Update Display
+
+When updating bug metadata, changes are displayed in a formatted table:
+
+```
+Updating bug 12345:
+  ┌──────────────────┬───────────────┬───┬──────────────┐
+  │ Status           │ NEW           │ → │ Needs Signoff│
+  │ Patch-complexity │ ---           │ → │ Small patch  │
+  │ Sponsors         │               │   │ + Sponsor One│
+  │ Depends          │               │   │ + 12346      │
+  └──────────────────┴───────────────┴───┴──────────────┘
+```
+
+## Dependency Resolution
+
+When applying bugs, git-bz automatically:
+
+1. Checks the bug's `depends_on` field
+2. Filters dependencies by status (Needs Signoff, Signed Off, Failed QA, Passed QA, BLOCKED)
+3. Prompts to apply dependencies first
+4. Applies in correct order
+5. Tracks applied bugs to prevent duplicates
+
+## Sponsor Management
+
+Sponsors are managed like dependencies with add/remove tracking:
+
+```
+# In edit template:
+# Current sponsors: Existing Sponsor
+# Add one sponsor per line:
+Sponsors: Existing Sponsor
+Sponsors: New Sponsor
+# Sponsors: Example Name
+
+# Results in:
+# + New Sponsor (added)
+# Existing Sponsor (unchanged)
+```
+
+Auto-updates sponsorship status to "Sponsored" when adding sponsors if current status is "Seeking sponsor" or "Unsponsored".
+
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for information on running tests and contributing.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 or later. See the source files for details.
