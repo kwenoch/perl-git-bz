@@ -82,7 +82,7 @@ subtest 'Sponsor section with no sponsors - shows example' => sub {
 
     like($template, qr/# Current sponsors:\s*$/m,
          'Shows empty current sponsors');
-    like($template, qr/# Sponsors: Sponsor One, Sponsor Two/,
+    like($template, qr/# Sponsors: Sponsor Name/,
          'Shows example sponsor format when no sponsors');
 };
 
@@ -142,8 +142,8 @@ subtest 'Sponsor section merges bug and commit sponsors' => sub {
 
     like($template, qr/# Current sponsors: ACME Corp, ByWater Solutions/,
          'Shows current bug sponsors');
-    like($template, qr/^Sponsors: ACME Corp, ByWater Solutions, Catalyst IT$/m,
-         'Merges and sorts all unique sponsors');
+    like($template, qr/Sponsors: ACME Corp.*Sponsors: ByWater Solutions.*Sponsors: Catalyst IT/s,
+         'Merges and sorts all unique sponsors on separate lines');
 };
 
 subtest 'Multiple commits with different sponsors' => sub {
@@ -172,8 +172,8 @@ subtest 'Multiple commits with different sponsors' => sub {
          'Shows first sponsor in commit reference');
     like($template, qr/#\s+Sponsored-by: Sponsor Two/,
          'Shows second sponsor in commit reference');
-    like($template, qr/^Sponsors: Sponsor One, Sponsor Two$/m,
-         'Proposes merged sponsors from all commits');
+    like($template, qr/Sponsors: Sponsor One.*Sponsors: Sponsor Two/s,
+         'Proposes merged sponsors from all commits on separate lines');
 };
 
 subtest 'Sponsor names with whitespace are trimmed' => sub {
@@ -190,8 +190,8 @@ subtest 'Sponsor names with whitespace are trimmed' => sub {
     $attach->edit_bug_updates($bug, \@commits);
     my $template = $captured_template;
 
-    like($template, qr/^Sponsors: New Sponsor, Old Sponsor, Whitespace Sponsor$/m,
-         'Trims whitespace and sorts sponsors');
+    like($template, qr/Sponsors: New Sponsor.*Sponsors: Old Sponsor.*Sponsors: Whitespace Sponsor/s,
+         'Trims whitespace and sorts sponsors on separate lines');
 };
 
 done_testing();

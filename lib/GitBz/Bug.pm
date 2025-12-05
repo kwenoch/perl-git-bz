@@ -178,6 +178,27 @@ sub set_depends {
     }
 }
 
+=head2 set_sponsors
+
+    $bug->set_sponsors(add => ['Sponsor One'], remove => ['Sponsor Two']);
+
+Queues sponsor changes.
+
+=cut
+
+sub set_sponsors {
+    my ( $self, %changes ) = @_;
+
+    $self->{_pending_updates}{cf_sponsors} = \%changes;
+
+    if ( $changes{add} ) {
+        $self->add_display_row( 'Sponsors', '', '', 'added ' . join( ', ', @{ $changes{add} } ) );
+    }
+    if ( $changes{remove} ) {
+        $self->add_display_row( 'Sponsors', '', '', 'removed ' . join( ', ', @{ $changes{remove} } ) );
+    }
+}
+
 =head2 apply_updates
 
     $bug->apply_updates();
@@ -193,6 +214,24 @@ sub apply_updates {
 
     # Display changes before updating
     $self->_display_changes();
+
+    # Convert sponsors add/remove to comma-separated string
+    if ( $self->{_pending_updates}{cf_sponsors} && ref $self->{_pending_updates}{cf_sponsors} eq 'HASH' ) {
+        my $changes = $self->{_pending_updates}{cf_sponsors};
+        my @current = split /,\s*/, ( $self->cf_sponsors || '' );
+        @current = grep { $_ } @current;    # Remove empty strings
+
+        my %sponsors = map { $_ => 1 } @current;
+
+        if ( $changes->{add} ) {
+            $sponsors{$_} = 1 for @{ $changes->{add} };
+        }
+        if ( $changes->{remove} ) {
+            delete $sponsors{$_} for @{ $changes->{remove} };
+        }
+
+        $self->{_pending_updates}{cf_sponsors} = join( ', ', sort keys %sponsors );
+    }
 
     $self->update( %{ $self->{_pending_updates} } );
     $self->{_pending_updates} = {};

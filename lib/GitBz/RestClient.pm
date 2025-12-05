@@ -143,7 +143,7 @@ sub get_bug {
     my ( $self, $bug_id ) = @_;
 
     my $url = sprintf(
-        "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity",
+        "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity,cf_sponsors,cf_sponsorship",
         $self->{base_url}, $bug_id
     );
     my $response = $self->{ua}->get($url);
@@ -191,11 +191,11 @@ sub add_attachment {
 
     my $url = sprintf( "%s/bug/%s/attachment", $self->{base_url}, $bug_id );
 
-    my $payload = $self->_create_attachment_payload($bug_id, $data, $filename, $summary, %opts);
-    
+    my $payload = $self->_create_attachment_payload( $bug_id, $data, $filename, $summary, %opts );
+
     my $token = $self->get_token();
     warn "DEBUG: Token for add_attachment: " . ( $token || 'NONE' ) . "\n" if $ENV{DEBUG};
-    $payload->{token} = $token if $token;
+    $payload->{token} = $token                                             if $token;
 
     my $response = $self->{ua}->post(
         $url,
@@ -331,7 +331,7 @@ sub _create_attachment_payload {
         is_patch     => JSON::true,
     };
 
-    $payload->{comment} = decode('UTF-8', $opts{comment}) if $opts{comment};
+    $payload->{comment} = decode( 'UTF-8', $opts{comment} ) if $opts{comment};
     return $payload;
 }
 
@@ -345,11 +345,11 @@ Returns the web URL for viewing a bug in the browser.
 
 sub get_bug_url {
     my ( $self, $bug_id ) = @_;
-    
+
     # Convert REST URL to web URL
     my $web_url = $self->{base_url};
-    $web_url =~ s|/rest$||;  # Remove /rest suffix
-    
+    $web_url =~ s|/rest$||;    # Remove /rest suffix
+
     return "$web_url/show_bug.cgi?id=$bug_id";
 }
 

@@ -281,6 +281,48 @@ sub create_bug_template {
     $template .= "# Depends: bug yyyy\n";
     $template .= "\n";
 
+    # Add sponsorship status options
+    my $sponsorship = $bug->cf_sponsorship || "";
+    $template .= "# Current sponsorship: $sponsorship\n";
+    my $sponsorship_values = GitBz::Progress::with_spinner(
+        "Fetching field values",
+        sub {
+            return $client->get_field_values('cf_sponsorship');
+        },
+        1
+    );
+    if ($sponsorship_values) {
+        for my $status (@$sponsorship_values) {
+            $template .= "# Sponsorship: $status\n";
+        }
+    }
+    $template .= "\n";
+
+    # Add sponsors section (one sponsor per line)
+    my $current_sponsors = $bug->cf_sponsors || "";
+    my @current_sponsor_list;
+    if ($current_sponsors) {
+
+        # Split existing sponsors by comma and trim whitespace
+        for my $sponsor ( split /,/, $current_sponsors ) {
+            $sponsor =~ s/^\s+|\s+$//g;
+            push @current_sponsor_list, $sponsor if $sponsor;
+        }
+    }
+
+    my $sponsors_str = @current_sponsor_list ? join( ', ', @current_sponsor_list ) : '';
+    $template .= "# Current sponsors: $sponsors_str\n";
+    $template .= "# Add one sponsor per line:\n";
+
+    # Show current sponsors uncommented
+    for my $sponsor (@current_sponsor_list) {
+        $template .= "Sponsors: $sponsor\n";
+    }
+
+    # Show skeleton commented
+    $template .= "# Sponsors: Sponsor Name\n";
+    $template .= "\n";
+
     $template .= "# Enter comment below. Lines starting with '#' will be ignored.\n";
     $template .= "# To obsolete patches, uncomment the appropriate Obsoletes lines.\n";
 
@@ -369,6 +411,10 @@ sub update_bug {
             $update_params{resolution} = $1;
         } elsif ( $line =~ /^\s*Patch-complexity\s*:\s*(.+)/ ) {
             $update_params{cf_patch_complexity} = $1;
+        } elsif ( $line =~ /^\s*Sponsors\s*:\s*(.+)/ ) {
+            push @{ $update_params{cf_sponsors} }, $1;
+        } elsif ( $line =~ /^\s*Sponsorship\s*:\s*(.+)/ ) {
+            $update_params{cf_sponsorship} = $1;
         } elsif ( $line =~ /^\s*Depends\s*:\s*([Bb][Uu][Gg])?\s*(\d+)/ ) {
             push @{ $update_params{depends_on} }, $2;
         } elsif ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
@@ -407,6 +453,32 @@ sub update_bug {
     {
         $actual_changes{cf_patch_complexity} = $update_params{cf_patch_complexity};
     }
+    if (   $update_params{cf_sponsorship}
+        && $update_params{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
+    {
+        $actual_changes{cf_sponsorship} = $update_params{cf_sponsorship};
+    }
+    if ( $update_params{cf_sponsors} ) {
+        my @new_sponsors = @{ $update_params{cf_sponsors} };
+        my @old_sponsors = split /,\s*/, ( $bug->cf_sponsors || '' );
+        @old_sponsors = grep { $_ } @old_sponsors;    # Remove empty strings
+
+        my @to_add = grep {
+            my $new = $_;
+            !grep { $_ eq $new } @old_sponsors
+        } @new_sponsors;
+        my @to_remove = grep {
+            my $old = $_;
+            !grep { $_ eq $old } @new_sponsors
+        } @old_sponsors;
+
+        if ( @to_add || @to_remove ) {
+            my %sponsors_update;
+            $sponsors_update{add}        = \@to_add    if @to_add;
+            $sponsors_update{remove}     = \@to_remove if @to_remove;
+            $actual_changes{cf_sponsors} = \%sponsors_update;
+        }
+    }
     if ( $update_params{depends_on} ) {
         my @new_depends = @{ $update_params{depends_on} };
         my @old_depends = @{ $bug->depends_on };
@@ -439,6 +511,9 @@ sub update_bug {
         $bug->set_field( 'resolution', $actual_changes{resolution} ) if $actual_changes{resolution};
         $bug->set_field( 'cf_patch_complexity', $actual_changes{cf_patch_complexity} )
             if $actual_changes{cf_patch_complexity};
+        $bug->set_sponsors( %{ $actual_changes{cf_sponsors} } ) if $actual_changes{cf_sponsors};
+        $bug->set_field( 'cf_sponsorship', $actual_changes{cf_sponsorship} )
+            if $actual_changes{cf_sponsorship};
         $bug->add_comment( $actual_changes{comment}{body} )   if $actual_changes{comment};
         $bug->set_depends( %{ $actual_changes{depends_on} } ) if $actual_changes{depends_on};
 

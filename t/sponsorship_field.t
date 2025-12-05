@@ -47,7 +47,7 @@ my $attach = GitBz::Commands::Attach->new($mock_commands);
     my $content = "Sponsors: New Sponsor\n";
     my ( $comment, $obsoletes, $updates ) = $attach->parse_bug_updates( $content, $bug );
 
-    is( $updates->{cf_sponsors}, 'New Sponsor', 'Sponsors field updated' );
+    is_deeply( $updates->{cf_sponsors}{add}, ['New Sponsor'], 'Sponsors field updated' );
     is( $updates->{cf_sponsorship}, 'Sponsored', 'Sponsorship changed from --- to Sponsored' );
 }
 

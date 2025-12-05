@@ -154,6 +154,44 @@ subtest 'set_depends() tests' => sub {
     }
 };
 
+subtest 'set_sponsors() tests' => sub {
+    plan tests => 4;
+    
+    # Test 1: set_sponsors with add
+    {
+        my $bug = create_bug();
+        $bug->set_sponsors( add => [ 'Sponsor One', 'Sponsor Two' ] );
+        is_deeply(
+            $bug->{_pending_updates}{cf_sponsors}, { add => [ 'Sponsor One', 'Sponsor Two' ] },
+            'set_sponsors adds to pending updates'
+        );
+        is_deeply(
+            $bug->{_display_rows}[0], [ 'Sponsors', '', '', 'added Sponsor One, Sponsor Two' ],
+            'display row shows added sponsors'
+        );
+    }
+    
+    # Test 2: set_sponsors with remove
+    {
+        my $bug = create_bug();
+        $bug->set_sponsors( remove => ['Old Sponsor'] );
+        is_deeply(
+            $bug->{_display_rows}[0], [ 'Sponsors', '', '', 'removed Old Sponsor' ],
+            'display row shows removed sponsors'
+        );
+    }
+    
+    # Test 3: set_sponsors with both add and remove
+    {
+        my $bug = create_bug();
+        $bug->set_sponsors( add => ['New Sponsor'], remove => ['Old Sponsor'] );
+        is(
+            scalar @{ $bug->{_display_rows} }, 2,
+            'set_sponsors with add and remove creates two display rows'
+        );
+    }
+};
+
 subtest 'add_display_row() tests' => sub {
     plan tests => 2;
 

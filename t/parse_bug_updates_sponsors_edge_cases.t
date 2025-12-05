@@ -57,36 +57,41 @@ subtest 'Empty sponsors field not captured' => sub {
 };
 
 subtest 'Single sponsor parsed correctly' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = "Sponsors: ACME Corp\n";
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
-    is($updates->{cf_sponsors}, 'ACME Corp', 'Single sponsor parsed correctly');
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add}, ['ACME Corp'], 'Single sponsor added correctly');
 };
 
 subtest 'Multiple sponsors with commas parsed correctly' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = "Sponsors: ACME Corp, ByWater Solutions, Catalyst IT\n";
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
-    is($updates->{cf_sponsors}, 'ACME Corp, ByWater Solutions, Catalyst IT',
-       'Multiple sponsors parsed correctly');
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add}, 
+              ['ACME Corp, ByWater Solutions, Catalyst IT'],
+              'Multiple sponsors added correctly');
 };
 
 subtest 'Sponsors with extra whitespace - leading trimmed' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = "Sponsors:  ACME Corp  ,  ByWater Solutions  \n";
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
     # Regex \s* trims leading whitespace after colon, but preserves internal/trailing
-    is($updates->{cf_sponsors}, 'ACME Corp  ,  ByWater Solutions  ',
-       'Leading whitespace after colon trimmed, rest preserved');
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add}, 
+              ['ACME Corp  ,  ByWater Solutions  '],
+              'Leading whitespace after colon trimmed, rest preserved');
 };
 
 subtest 'Sponsors field case sensitive label' => sub {
@@ -95,7 +100,7 @@ subtest 'Sponsors field case sensitive label' => sub {
     my $bug = create_mock_bug();
 
     my ($c1, $o1, $u1) = $attach->parse_bug_updates("Sponsors: Test\n", $bug);
-    is($u1->{cf_sponsors}, 'Test', 'Sponsors: (capital S) works');
+    is_deeply($u1->{cf_sponsors}{add}, ['Test'], 'Sponsors: (capital S) works');
 
     my ($c2, $o2, $u2) = $attach->parse_bug_updates("sponsors: Test\n", $bug);
     is($u2->{cf_sponsors}, undef, 'sponsors: (lowercase) does not match');
@@ -105,14 +110,16 @@ subtest 'Sponsors field case sensitive label' => sub {
 };
 
 subtest 'Sponsors with special characters' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = "Sponsors: O'Reilly & Associates, Smith-Johnson Inc.\n";
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
-    is($updates->{cf_sponsors}, "O'Reilly & Associates, Smith-Johnson Inc.",
-       'Sponsors with special characters parsed correctly');
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add},
+              ["O'Reilly & Associates, Smith-Johnson Inc."],
+              'Sponsors with special characters parsed correctly');
 };
 
 subtest 'cf_sponsorship auto-update with empty string current value' => sub {
@@ -159,23 +166,25 @@ END
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
     is($updates->{status}, 'ASSIGNED', 'Status parsed correctly');
-    is($updates->{cf_sponsors}, 'ACME Corp', 'Sponsors parsed correctly');
+    is_deeply($updates->{cf_sponsors}{add}, ['ACME Corp'], 'Sponsors parsed correctly');
     is($updates->{cf_patch_complexity}, 'Small patch', 'Patch complexity parsed correctly');
 };
 
 subtest 'Sponsors field with colon in value' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = "Sponsors: Company: A Division, Other Corp\n";
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
-    is($updates->{cf_sponsors}, 'Company: A Division, Other Corp',
-       'Sponsors with colons in names parsed correctly');
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add},
+              ['Company: A Division, Other Corp'],
+              'Sponsors with colons in names parsed correctly');
 };
 
 subtest 'Multiple sponsor lines (last one wins)' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = <<'END';
@@ -185,13 +194,14 @@ END
 
     my ($comment, $obsoletes, $updates) = $attach->parse_bug_updates($content, $bug);
 
-    # Parser processes line by line, so last occurrence wins
-    is($updates->{cf_sponsors}, 'Second Sponsor',
-       'Last Sponsors line overwrites earlier ones');
+    # Parser processes line by line, so both are added
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add}, ['First Sponsor', 'Second Sponsor'],
+              'Multiple Sponsors lines all added');
 };
 
 subtest 'Sponsors in comment section not parsed as field' => sub {
-    plan tests => 1;
+    plan tests => 2;
 
     my $bug = create_mock_bug();
     my $content = <<'END';
@@ -204,8 +214,9 @@ END
 
     # The sponsors line should still be parsed (it's not in a comment)
     # But if it were commented with #, it wouldn't be
-    is($updates->{cf_sponsors}, 'This should not be parsed',
-       'Sponsors line parsed even in text content');
+    is(ref $updates->{cf_sponsors}, 'HASH', 'Sponsors returns hash ref');
+    is_deeply($updates->{cf_sponsors}{add}, ['This should not be parsed'],
+              'Sponsors line parsed even in text content');
 };
 
 done_testing();
