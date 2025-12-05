@@ -16,6 +16,10 @@
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
 use Modern::Perl;
+
+use utf8;
+
+use open ':std', ':utf8';
 use Test::More;
 use Test::Output;
 use Test::MockModule;

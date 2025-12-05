@@ -37,6 +37,9 @@ Handles bug data access and operations through the REST client.
 
 use Modern::Perl;
 
+use utf8;
+use open ':std', ':utf8';
+
 use GitBz::Exception;
 
 =head2 get
@@ -54,9 +57,11 @@ sub get {
     GitBz::Exception->throw("Bug $number not found") unless $bug_data;
 
     return bless {
-        client       => $client,
-        data         => $bug_data,
-        _attachments => undef,
+        client           => $client,
+        data             => $bug_data,
+        _attachments     => undef,
+        _display_rows    => [],
+        _pending_updates => {},
     }, $class;
 }
 
@@ -91,6 +96,135 @@ sub attachments {
     }
 
     return $self->{_attachments};
+}
+
+=head2 add_display_row
+
+    $bug->add_display_row($field, $old, $arrow, $new);
+
+Adds a row to be displayed when update() is called.
+
+=cut
+
+sub add_display_row {
+    my ( $self, @row ) = @_;
+    push @{ $self->{_display_rows} }, \@row;
+}
+
+=head2 set_field
+
+    $bug->set_field($field, $value);
+
+Queues a field update and adds display row if value differs from current.
+
+=cut
+
+sub set_field {
+    my ( $self, $field, $value ) = @_;
+
+    my %field_labels = (
+        status              => 'Status',
+        resolution          => 'Resolution',
+        cf_patch_complexity => 'Patch-complexity',
+        cf_sponsors         => 'Sponsors',
+        cf_sponsorship      => 'Sponsorship',
+    );
+
+    my $current = $self->can($field) ? $self->$field : undef;
+
+    # Only add if different
+    if ( !defined $current || $value ne $current ) {
+        $self->{_pending_updates}{$field} = $value;
+
+        my $label = $field_labels{$field} || ucfirst($field);
+        my $old   = $current              || '---';
+        $self->add_display_row( $label, $old, '→', $value );
+    }
+}
+
+=head2 add_comment
+
+    $bug->add_comment($text);
+
+Queues a comment to be added.
+
+=cut
+
+sub add_comment {
+    my ( $self, $text ) = @_;
+
+    $self->{_pending_updates}{comment} = { body => $text };
+    $self->add_display_row( 'Comment', '', '', '(added)' );
+}
+
+=head2 set_depends
+
+    $bug->set_depends(add => [123], remove => [456]);
+
+Queues dependency changes.
+
+=cut
+
+sub set_depends {
+    my ( $self, %changes ) = @_;
+
+    $self->{_pending_updates}{depends_on} = \%changes;
+
+    if ( $changes{add} ) {
+        $self->add_display_row( 'Depends', '', '', 'added ' . join( ', ', @{ $changes{add} } ) );
+    }
+    if ( $changes{remove} ) {
+        $self->add_display_row( 'Depends', '', '', 'removed ' . join( ', ', @{ $changes{remove} } ) );
+    }
+}
+
+=head2 apply_updates
+
+    $bug->apply_updates();
+
+Applies all pending field updates to Bugzilla.
+
+=cut
+
+sub apply_updates {
+    my ($self) = @_;
+
+    return unless %{ $self->{_pending_updates} };
+
+    # Display changes before updating
+    $self->_display_changes();
+
+    $self->update( %{ $self->{_pending_updates} } );
+    $self->{_pending_updates} = {};
+}
+
+=head2 _display_changes
+
+Internal method to display accumulated changes.
+
+=cut
+
+sub _display_changes {
+    my ($self) = @_;
+
+    return unless @{ $self->{_display_rows} };
+
+    binmode( STDOUT, ':utf8' );
+
+    # Clear the current line (spinner)
+    print "\r\033[K";
+
+    require Text::UnicodeBox::Table;
+
+    my $table = Text::UnicodeBox::Table->new();
+    $table->add_row(@$_) for @{ $self->{_display_rows} };
+
+    my $output = $table->render();
+    $output =~ s/^/  /gm;
+    print $output . "\n";
+
+    # Clear display rows after showing
+    $self->{_display_rows} = [];
 }
 
 =head2 update

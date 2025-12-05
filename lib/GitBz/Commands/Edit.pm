@@ -73,8 +73,8 @@ sub execute {
     my ( $self, @args ) = @_;
 
     # Ensure UTF-8 output for this command
-    binmode(STDOUT, ':utf8');
-    binmode(STDERR, ':utf8');
+    binmode( STDOUT, ':utf8' );
+    binmode( STDERR, ':utf8' );
 
     my %opts;
 
@@ -434,33 +434,17 @@ sub update_bug {
     if (%actual_changes) {
         print "Updating bug $bug_ref:\n";
 
-        # Show field changes
-        if ( $actual_changes{status} ) {
-            print "  ✓ Status: " . $bug->status . " → $actual_changes{status}\n";
-        }
-        if ( $actual_changes{resolution} ) {
-            my $old = $bug->resolution || 'none';
-            print "  ✓ Resolution: $old → $actual_changes{resolution}\n";
-        }
-        if ( $actual_changes{cf_patch_complexity} ) {
-            my $old = $bug->cf_patch_complexity || 'none';
-            print "  ✓ Patch-complexity: $old → $actual_changes{cf_patch_complexity}\n";
-        }
-        if ( $actual_changes{comment} ) {
-            print "  ✓ Added comment\n";
-        }
-        if ( $actual_changes{depends_on} ) {
-            my $depends_change = $actual_changes{depends_on};
-            if ( $depends_change->{add} ) {
-                print "  ✓ Depends: added " . join( ' ', @{ $depends_change->{add} } ) . "\n";
-            }
-            if ( $depends_change->{remove} ) {
-                print "  ✓ Depends: removed " . join( ' ', @{ $depends_change->{remove} } ) . "\n";
-            }
-        }
+        # Queue field updates
+        $bug->set_field( 'status',     $actual_changes{status} )     if $actual_changes{status};
+        $bug->set_field( 'resolution', $actual_changes{resolution} ) if $actual_changes{resolution};
+        $bug->set_field( 'cf_patch_complexity', $actual_changes{cf_patch_complexity} )
+            if $actual_changes{cf_patch_complexity};
+        $bug->add_comment( $actual_changes{comment}{body} )   if $actual_changes{comment};
+        $bug->set_depends( %{ $actual_changes{depends_on} } ) if $actual_changes{depends_on};
 
+        $bug->_display_changes();
         my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
-        $bug->update(%actual_changes);
+        $bug->apply_updates();
         GitBz::Progress::stop_spinner( $spinner, 'success', "Bug fields updated" );
         $changed = 1;
     }

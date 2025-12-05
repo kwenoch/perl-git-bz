@@ -77,8 +77,8 @@ sub execute {
     my ( $self, @args ) = @_;
 
     # Ensure UTF-8 output for this command
-    binmode(STDOUT, ':utf8');
-    binmode(STDERR, ':utf8');
+    binmode( STDOUT, ':utf8' );
+    binmode( STDERR, ':utf8' );
 
     my %opts;
 
@@ -392,45 +392,19 @@ sub attach_patches {
     if ( %bug_updates || @obsoletes_list ) {
         print "\nUpdating bug:\n";
 
-        # Show bug field updates (for informational purposes)
-        if ( $bug_updates{status} && $bug_updates{status} ne $bug->status ) {
-            print "  Status: " . $bug->status . " → $bug_updates{status}\n";
-        }
-        if (   $bug_updates{cf_patch_complexity}
-            && $bug_updates{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
-        {
-            my $old = $bug->cf_patch_complexity || '---';
-            print "  Patch-complexity: $old → $bug_updates{cf_patch_complexity}\n";
-        }
-        if (   $bug_updates{cf_sponsors}
-            && $bug_updates{cf_sponsors} ne ( $bug->cf_sponsors || '' ) )
-        {
-            my $old = $bug->cf_sponsors || '---';
-            print "  Sponsors: $old → $bug_updates{cf_sponsors}\n";
-        }
-        if (   $bug_updates{cf_sponsorship}
-            && $bug_updates{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
-        {
-            my $old = $bug->cf_sponsorship || '---';
-            print "  Sponsorship: $old → $bug_updates{cf_sponsorship}\n";
-        }
-        if ( $bug_updates{comment} ) {
-            print "  Comment: (added)\n";
-        }
-        if ( $bug_updates{depends_on} ) {
-            my $depends_change = $bug_updates{depends_on};
-            if ( $depends_change->{add} ) {
-                print "  Depends: added " . join( ' ', @{ $depends_change->{add} } ) . "\n";
-            }
-            if ( $depends_change->{remove} ) {
-                print "  Depends: removed " . join( ' ', @{ $depends_change->{remove} } ) . "\n";
-            }
-        }
+        # Queue field updates
+        $bug->set_field( 'status',              $bug_updates{status} ) if $bug_updates{status};
+        $bug->set_field( 'cf_patch_complexity', $bug_updates{cf_patch_complexity} )
+            if $bug_updates{cf_patch_complexity};
+        $bug->set_field( 'cf_sponsors', $bug_updates{cf_sponsors} )       if $bug_updates{cf_sponsors};
+        $bug->set_field( 'cf_sponsorship', $bug_updates{cf_sponsorship} ) if $bug_updates{cf_sponsorship};
+        $bug->add_comment( $bug_updates{comment}{body} )                  if $bug_updates{comment};
+        $bug->set_depends( %{ $bug_updates{depends_on} } )                if $bug_updates{depends_on};
 
-        # Perform updates with spinner
+        # Apply updates with spinner
         if (%bug_updates) {
             my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
-            $bug->update(%bug_updates);
+            $bug->apply_updates();
             GitBz::Progress::stop_spinner( $spinner, 'success', "Bug fields updated" );
         }
 

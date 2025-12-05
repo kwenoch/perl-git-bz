@@ -7,6 +7,7 @@ requires 'MIME::Base64';
 requires 'Exception::Class';
 requires 'JSON';
 requires 'LWP::UserAgent';
+requires 'Text::UnicodeBox::Table';
 
 on 'test' => sub {
     requires 'IO::String';
