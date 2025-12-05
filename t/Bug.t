@@ -128,7 +128,7 @@ subtest 'set_depends() tests' => sub {
             'set_depends adds to pending updates'
         );
         is_deeply(
-            $bug->{_display_rows}[0], [ 'Depends', '', '', 'added 123, 456' ],
+            $bug->{_display_rows}[0], [ 'Depends', '', '', '+ 123, 456' ],
             'display row shows added dependencies'
         );
     }
@@ -138,7 +138,7 @@ subtest 'set_depends() tests' => sub {
         my $bug = create_bug();
         $bug->set_depends( remove => [789] );
         is_deeply(
-            $bug->{_display_rows}[0], [ 'Depends', '', '', 'removed 789' ],
+            $bug->{_display_rows}[0], [ 'Depends', '', '', '- 789' ],
             'display row shows removed dependencies'
         );
     }
@@ -166,7 +166,7 @@ subtest 'set_sponsors() tests' => sub {
             'set_sponsors adds to pending updates'
         );
         is_deeply(
-            $bug->{_display_rows}[0], [ 'Sponsors', '', '', 'added Sponsor One, Sponsor Two' ],
+            $bug->{_display_rows}[0], [ 'Sponsors', '', '', '+ Sponsor One, Sponsor Two' ],
             'display row shows added sponsors'
         );
     }
@@ -176,7 +176,7 @@ subtest 'set_sponsors() tests' => sub {
         my $bug = create_bug();
         $bug->set_sponsors( remove => ['Old Sponsor'] );
         is_deeply(
-            $bug->{_display_rows}[0], [ 'Sponsors', '', '', 'removed Old Sponsor' ],
+            $bug->{_display_rows}[0], [ 'Sponsors', '', '', '- Old Sponsor' ],
             'display row shows removed sponsors'
         );
     }

@@ -171,10 +171,10 @@ sub set_depends {
     $self->{_pending_updates}{depends_on} = \%changes;
 
     if ( $changes{add} ) {
-        $self->add_display_row( 'Depends', '', '', 'added ' . join( ', ', @{ $changes{add} } ) );
+        $self->add_display_row( 'Depends', '', '', '+ ' . join( ', ', @{ $changes{add} } ) );
     }
     if ( $changes{remove} ) {
-        $self->add_display_row( 'Depends', '', '', 'removed ' . join( ', ', @{ $changes{remove} } ) );
+        $self->add_display_row( 'Depends', '', '', '- ' . join( ', ', @{ $changes{remove} } ) );
     }
 }
 
@@ -192,10 +192,10 @@ sub set_sponsors {
     $self->{_pending_updates}{cf_sponsors} = \%changes;
 
     if ( $changes{add} ) {
-        $self->add_display_row( 'Sponsors', '', '', 'added ' . join( ', ', @{ $changes{add} } ) );
+        $self->add_display_row( 'Sponsors', '', '', '+ ' . join( ', ', @{ $changes{add} } ) );
     }
     if ( $changes{remove} ) {
-        $self->add_display_row( 'Sponsors', '', '', 'removed ' . join( ', ', @{ $changes{remove} } ) );
+        $self->add_display_row( 'Sponsors', '', '', '- ' . join( ', ', @{ $changes{remove} } ) );
     }
 }
 
