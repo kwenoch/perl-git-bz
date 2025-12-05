@@ -17,6 +17,9 @@ package GitBz::Progress;
 
 use Modern::Perl;
 
+use utf8;
+use open ':std', ':utf8';
+
 use Term::ANSIColor qw(colored);
 use Time::HiRes     qw(usleep);
 use POSIX ":sys_wait_h";
@@ -133,6 +136,9 @@ sub start_spinner {
     if ( $pid == 0 ) {
 
         # Child process - animate the spinner
+        # Re-enable UTF-8 output (not inherited from parent)
+        binmode(STDOUT, ':utf8');
+        
         my $frame = 0;
         while (1) {
             my $spinner_char = $SPINNER_CHARS[ $frame % @SPINNER_CHARS ];
@@ -174,6 +180,9 @@ sub stop_spinner {
     my ( $spinner_obj, $status, $custom_message, $clear_on_success ) = @_;
 
     my $message = $custom_message || $spinner_obj->{message};
+
+    # Ensure UTF-8 output for checkmarks
+    binmode(STDOUT, ':utf8');
 
     # Kill the spinner process if it exists
     if ( $spinner_obj->{pid} ) {

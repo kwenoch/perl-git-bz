@@ -35,6 +35,9 @@ Can operate on individual bugs or extract bug references from Git commits.
 
 use Modern::Perl;
 
+use utf8;
+use open ':std', ':utf8';
+
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use File::Temp;
@@ -68,6 +71,10 @@ Main entry point for the edit command.
 
 sub execute {
     my ( $self, @args ) = @_;
+
+    # Ensure UTF-8 output for this command
+    binmode(STDOUT, ':utf8');
+    binmode(STDERR, ':utf8');
 
     my %opts;
 

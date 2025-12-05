@@ -35,6 +35,10 @@ Provides interactive patch selection and handles git-am workflow states.
 =cut
 
 use Modern::Perl;
+
+use utf8;
+use open ':std', ':utf8';
+
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use GitBz::Git;
@@ -72,6 +76,10 @@ Main entry point for the apply command.
 
 sub execute {
     my ( $self, @args ) = @_;
+
+    # Ensure UTF-8 output for this command
+    binmode(STDOUT, ':utf8');
+    binmode(STDERR, ':utf8');
 
     my %opts;
 

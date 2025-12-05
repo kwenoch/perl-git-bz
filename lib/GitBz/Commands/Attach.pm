@@ -35,6 +35,10 @@ Supports interactive editing of bug fields and attachment metadata.
 
 use Modern::Perl;
 
+use utf8;
+no warnings 'utf8';
+use open ':std', ':utf8';
+
 use Getopt::Long qw(GetOptionsFromArray);
 use Try::Tiny    qw(catch try);
 use File::Temp;
@@ -71,6 +75,10 @@ Main entry point for the attach command.
 
 sub execute {
     my ( $self, @args ) = @_;
+
+    # Ensure UTF-8 output for this command
+    binmode(STDOUT, ':utf8');
+    binmode(STDERR, ':utf8');
 
     my %opts;
 
@@ -694,14 +702,14 @@ sub edit_template {
     my ( $self, $template ) = @_;
 
     my $temp = File::Temp->new( SUFFIX => '.txt' );
-    binmode $temp, ':encoding(UTF-8)';
+    binmode $temp, ':utf8';
     print $temp $template;
     close $temp;
 
     my $editor = $ENV{EDITOR} || $ENV{GIT_EDITOR} || 'vi';
     system( $editor, $temp->filename );
 
-    open my $fh, '<:encoding(UTF-8)', $temp->filename or die "Cannot read temp file: $!";
+    open my $fh, '<:utf8', $temp->filename or die "Cannot read temp file: $!";
     my $content = do { local $/; <$fh> };
     close $fh;
 

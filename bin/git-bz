@@ -77,8 +77,14 @@ the Free Software Foundation; either version 3 of the License, or
 
 use Modern::Perl;
 
+# Enable UTF-8 immediately, before loading any modules
+binmode(STDIN,  ':utf8');
+binmode(STDOUT, ':utf8');
+binmode(STDERR, ':utf8');
+
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
+use open ':std', ':utf8';
 use GitBz::Commands;
 
 GitBz::Commands->dispatch(@ARGV);
