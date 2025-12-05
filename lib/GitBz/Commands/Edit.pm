@@ -47,6 +47,7 @@ use GitBz::Exception;
 use GitBz::StatusWorkflow;
 use GitBz::Bug;
 use GitBz::Progress;
+use GitBz::Template;
 
 =head2 new
 
@@ -224,7 +225,7 @@ sub create_bug_template {
     my $template = "";
     $template .= "# Bug " . $bug->id . " - " . $bug->summary . "\n\n";
 
-    # Show existing patches for obsoleting
+    # Fetch attachments for obsoleting
     my $attachments = GitBz::Progress::with_spinner(
         "Fetching attachments",
         sub {
@@ -232,96 +233,9 @@ sub create_bug_template {
         },
         1
     );
-    if ( $attachments && @$attachments ) {
-        for my $patch (@$attachments) {
-            next unless $patch->{is_patch} && !$patch->{is_obsolete};
-            $template .= "#Obsoletes: $patch->{id} - $patch->{summary}\n";
-        }
-        $template .= "\n";
-    }
 
-    # Add status options
-    my $workflow = GitBz::StatusWorkflow->new($client);
-    $template .= "# Current status: " . $bug->status . "\n";
-    my $status_values = $workflow->get_next_status_values( $bug->status );
-    for my $status (@$status_values) {
-        $template .= "# Status: $status\n";
-    }
-    $template .= "\n";
-
-    # Add patch complexity options
-    my $complexity = $bug->cf_patch_complexity || "";
-    $template .= "# Current patch-complexity: $complexity\n";
-    my $complexity_values = GitBz::Progress::with_spinner(
-        "Fetching field values",
-        sub {
-            return $client->get_field_values('cf_patch_complexity');
-        },
-        1
-    );
-    if ($complexity_values) {
-        for my $comp (@$complexity_values) {
-            $template .= "# Patch-complexity: $comp\n";
-        }
-    }
-    $template .= "\n";
-
-    # Add depends options
-    my $depends_list = $bug->depends_on;
-    my $depends_str  = @$depends_list ? join( ' ', @$depends_list ) : '';
-    $template .= "# Current depends: $depends_str\n";
-
-    # Show current depends uncommented
-    for my $dep (@$depends_list) {
-        $template .= "Depends: bug $dep\n";
-    }
-
-    # Show skeleton commented
-    $template .= "# Depends: bug xxxx\n";
-    $template .= "# Depends: bug yyyy\n";
-    $template .= "\n";
-
-    # Add sponsorship status options
-    my $sponsorship = $bug->cf_sponsorship || "";
-    $template .= "# Current sponsorship: $sponsorship\n";
-    my $sponsorship_values = GitBz::Progress::with_spinner(
-        "Fetching field values",
-        sub {
-            return $client->get_field_values('cf_sponsorship');
-        },
-        1
-    );
-    if ($sponsorship_values) {
-        for my $status (@$sponsorship_values) {
-            $template .= "# Sponsorship: $status\n";
-        }
-    }
-    $template .= "\n";
-
-    # Add sponsors section (one sponsor per line)
-    my $current_sponsors = $bug->cf_sponsors || "";
-    my @current_sponsor_list;
-    if ($current_sponsors) {
-
-        # Split existing sponsors by comma and trim whitespace
-        for my $sponsor ( split /,/, $current_sponsors ) {
-            $sponsor =~ s/^\s+|\s+$//g;
-            push @current_sponsor_list, $sponsor if $sponsor;
-        }
-    }
-
-    my $sponsors_str = @current_sponsor_list ? join( ', ', @current_sponsor_list ) : '';
-    $template .= "# Current sponsors: $sponsors_str\n";
-    $template .= "# Add one sponsor per line:\n";
-
-    # Show current sponsors uncommented
-    for my $sponsor (@current_sponsor_list) {
-        $template .= "Sponsors: $sponsor\n";
-    }
-
-    # Show skeleton commented
-    $template .= "# Sponsors: Sponsor Name\n";
-    $template .= "\n";
+    # Add bug field sections (including obsoletes)
+    $template .= GitBz::Template::generate_bug_fields( $bug, $client, attachments => $attachments );
 
     $template .= "# Enter comment below. Lines starting with '#' will be ignored.\n";
     $template .= "# To obsolete patches, uncomment the appropriate Obsoletes lines.\n";
@@ -402,24 +316,12 @@ sub update_bug {
 
     my @obsoletes;
     my @comment_lines;
-    my %update_params;
 
+    # Parse obsoletes and collect comment lines
     for my $line (@non_comment_lines) {
-        if ( $line =~ /^\s*Status\s*:\s*(.+)/ ) {
-            $update_params{status} = $1;
-        } elsif ( $line =~ /^\s*Resolution\s*:\s*(.+)/ ) {
-            $update_params{resolution} = $1;
-        } elsif ( $line =~ /^\s*Patch-complexity\s*:\s*(.+)/ ) {
-            $update_params{cf_patch_complexity} = $1;
-        } elsif ( $line =~ /^\s*Sponsors\s*:\s*(.+)/ ) {
-            push @{ $update_params{cf_sponsors} }, $1;
-        } elsif ( $line =~ /^\s*Sponsorship\s*:\s*(.+)/ ) {
-            $update_params{cf_sponsorship} = $1;
-        } elsif ( $line =~ /^\s*Depends\s*:\s*([Bb][Uu][Gg])?\s*(\d+)/ ) {
-            push @{ $update_params{depends_on} }, $2;
-        } elsif ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
+        if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
-        } else {
+        } elsif ( $line !~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends)\s*:/ ) {
             push @comment_lines, $line;
         }
     }
@@ -428,7 +330,7 @@ sub update_bug {
     $comment =~ s/^\s+|\s+$//g;
 
     # Early return if no changes
-    return 0 unless %update_params || $comment || @obsoletes;
+    return 0 unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends)\s*:/m || $comment || @obsoletes;
 
     # Only fetch bug data if we have changes to process
     my $bug = GitBz::Progress::with_spinner(
@@ -440,64 +342,32 @@ sub update_bug {
     );
     my $changed = 0;
 
+    # Parse bug field updates using Template module
+    my $update_params = GitBz::Template::parse_bug_fields( $edited, $bug );
+
     # Check if there are actual changes before making API call
     my %actual_changes;
-    if ( $update_params{status} && $update_params{status} ne $bug->status ) {
-        $actual_changes{status} = $update_params{status};
+    if ( $update_params->{status} && $update_params->{status} ne $bug->status ) {
+        $actual_changes{status} = $update_params->{status};
     }
-    if ( $update_params{resolution} && $update_params{resolution} ne ( $bug->resolution || '' ) ) {
-        $actual_changes{resolution} = $update_params{resolution};
+    if ( $update_params->{resolution} && $update_params->{resolution} ne ( $bug->resolution || '' ) ) {
+        $actual_changes{resolution} = $update_params->{resolution};
     }
-    if (   $update_params{cf_patch_complexity}
-        && $update_params{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
+    if (   $update_params->{cf_patch_complexity}
+        && $update_params->{cf_patch_complexity} ne ( $bug->cf_patch_complexity || '' ) )
     {
-        $actual_changes{cf_patch_complexity} = $update_params{cf_patch_complexity};
+        $actual_changes{cf_patch_complexity} = $update_params->{cf_patch_complexity};
     }
-    if (   $update_params{cf_sponsorship}
-        && $update_params{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
+    if (   $update_params->{cf_sponsorship}
+        && $update_params->{cf_sponsorship} ne ( $bug->cf_sponsorship || '' ) )
     {
-        $actual_changes{cf_sponsorship} = $update_params{cf_sponsorship};
+        $actual_changes{cf_sponsorship} = $update_params->{cf_sponsorship};
     }
-    if ( $update_params{cf_sponsors} ) {
-        my @new_sponsors = @{ $update_params{cf_sponsors} };
-        my @old_sponsors = split /,\s*/, ( $bug->cf_sponsors || '' );
-        @old_sponsors = grep { $_ } @old_sponsors;    # Remove empty strings
-
-        my @to_add = grep {
-            my $new = $_;
-            !grep { $_ eq $new } @old_sponsors
-        } @new_sponsors;
-        my @to_remove = grep {
-            my $old = $_;
-            !grep { $_ eq $old } @new_sponsors
-        } @old_sponsors;
-
-        if ( @to_add || @to_remove ) {
-            my %sponsors_update;
-            $sponsors_update{add}        = \@to_add    if @to_add;
-            $sponsors_update{remove}     = \@to_remove if @to_remove;
-            $actual_changes{cf_sponsors} = \%sponsors_update;
-        }
+    if ( $update_params->{cf_sponsors} ) {
+        $actual_changes{cf_sponsors} = $update_params->{cf_sponsors};
     }
-    if ( $update_params{depends_on} ) {
-        my @new_depends = @{ $update_params{depends_on} };
-        my @old_depends = @{ $bug->depends_on };
-
-        my @to_add = grep {
-            my $new = $_;
-            !grep { $_ eq $new } @old_depends
-        } @new_depends;
-        my @to_remove = grep {
-            my $old = $_;
-            !grep { $_ eq $old } @new_depends
-        } @old_depends;
-
-        if ( @to_add || @to_remove ) {
-            my %depends_update;
-            $depends_update{add}        = \@to_add    if @to_add;
-            $depends_update{remove}     = \@to_remove if @to_remove;
-            $actual_changes{depends_on} = \%depends_update;
-        }
+    if ( $update_params->{depends_on} ) {
+        $actual_changes{depends_on} = $update_params->{depends_on};
     }
     if ($comment) {
         $actual_changes{comment} = { body => $comment };
