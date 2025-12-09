@@ -50,6 +50,9 @@ use File::Temp;
 use File::Path qw(rmtree);
 use MIME::Base64;
 
+binmode( STDOUT, ':utf8' );
+binmode( STDERR, ':utf8' );
+
 # Track applied bugs to avoid duplicates during recursive dependency resolution
 our @bugs_applied = ();
 
@@ -76,10 +79,6 @@ Main entry point for the apply command.
 
 sub execute {
     my ( $self, @args ) = @_;
-
-    # Ensure UTF-8 output for this command
-    binmode(STDOUT, ':utf8');
-    binmode(STDERR, ':utf8');
 
     my %opts;
 

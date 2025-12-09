@@ -24,6 +24,9 @@ use Term::ANSIColor qw(colored);
 use Time::HiRes     qw(usleep);
 use POSIX ":sys_wait_h";
 
+binmode( STDOUT, ':utf8' );
+binmode( STDERR, ':utf8' );
+
 our $VERSION = '0.1.0';
 
 # Spinner characters for animation (braille dots pattern)
@@ -181,7 +184,7 @@ sub stop_spinner {
 
     my $message = $custom_message || $spinner_obj->{message};
 
-    # Ensure UTF-8 output for checkmarks
+    # Re-enable UTF-8 output (not inherited from parent in all contexts)
     binmode(STDOUT, ':utf8');
 
     # Kill the spinner process if it exists
@@ -346,6 +349,8 @@ Update a progress line based on global verbosity level.
 sub update_progress_line {
     my ($message) = @_;
 
+    # Re-enable UTF-8 output (not inherited from parent in all contexts)
+    binmode(STDOUT, ':utf8');
     my $is_tty = -t STDOUT;
 
     # Level 0: quiet mode, no output
