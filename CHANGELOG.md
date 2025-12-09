@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- [#30] Fix UTF-8 "Wide character in print" warnings in apply command progress indicators
+- [#30] Fix UTF-8 "Wide character in print" warnings in Progress.pm
+  - Root cause: Term::ANSIColor::colored() returns strings with UTF-8 flag set (wide characters)
+  - Even with STDOUT having :utf8 layer, Perl's internal state becomes inconsistent when printing these strings
+  - Solution: Call binmode(STDOUT, ':utf8') before printing in all functions using colored()
+  - This refreshes the layer state, ensuring proper handling of wide characters
+  - Applied to: print_success, print_error, print_info, print_warning, stop_spinner, update_progress_line
 - [#32] Improve apply command progress output: show all patches being applied and add summary after preparing
 
 ## [1.0.1] - 2025-12-09

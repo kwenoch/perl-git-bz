@@ -228,7 +228,7 @@ Print a success message with a green checkmark.
 
 sub print_success {
     my ($message) = @_;
-    # Re-enable UTF-8 output (not inherited from parent in all contexts)
+    # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
     print colored( ['green'], '  ✓ ' ) . "$message\n";
 }
@@ -243,6 +243,8 @@ Print an error message with a red X.
 
 sub print_error {
     my ($message) = @_;
+    # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
+    binmode(STDOUT, ':utf8');
     print colored( ['red'], '  ✗ ' ) . "$message\n";
 }
 
@@ -256,6 +258,8 @@ Print an informational message.
 
 sub print_info {
     my ($message) = @_;
+    # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
+    binmode(STDOUT, ':utf8');
     print colored( ['blue'], '  ℹ ' ) . "$message\n";
 }
 
@@ -269,6 +273,8 @@ Print a warning message with a yellow warning symbol.
 
 sub print_warning {
     my ($message) = @_;
+    # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
+    binmode(STDOUT, ':utf8');
     print colored( ['yellow'], '  ⚠ ' ) . "$message\n";
 }
 
