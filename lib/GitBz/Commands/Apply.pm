@@ -591,8 +591,14 @@ sub prepare_patch_files {
         };
     }
 
-    # Finalize progress output
-    GitBz::Progress::finalize_progress_line();
+    # Overwrite the last progress line with summary
+    if ( GitBz::Progress::get_verbosity() >= 1 ) {
+        my $is_tty = -t STDOUT;
+        if ( GitBz::Progress::get_verbosity() == 1 && $is_tty ) {
+            print "\r\e[K";
+        }
+        GitBz::Progress::print_success("Prepared " . scalar(@$attachments) . " patch(es)");
+    }
 
     return ( $temp_dir, \@patch_info );
 }
@@ -627,10 +633,10 @@ sub apply_patches {
         try {
             GitBz::Git->run(@git_am_args);
 
-            # Show progress after successful application
+            # Show progress after successful application (print each line, don't overwrite)
             my $counter = sprintf( "[%d/%d]", $i + 1, scalar(@$patch_info) );
             my $summary = $info->{summary} || "patch $info->{id}";
-            GitBz::Progress::update_progress_line("$counter Applied $summary");
+            GitBz::Progress::print_success("$counter Applied $summary") if GitBz::Progress::get_verbosity() >= 1;
         } catch {
             $failed = 1;
 
@@ -666,7 +672,6 @@ sub apply_patches {
 
     # Finalize progress output if all succeeded
     unless ($failed) {
-        GitBz::Progress::finalize_progress_line();
         rmtree($temp_dir);
     }
 }

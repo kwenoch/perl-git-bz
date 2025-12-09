@@ -228,6 +228,8 @@ Print a success message with a green checkmark.
 
 sub print_success {
     my ($message) = @_;
+    # Re-enable UTF-8 output (not inherited from parent in all contexts)
+    binmode(STDOUT, ':utf8');
     print colored( ['green'], '  ✓ ' ) . "$message\n";
 }
 

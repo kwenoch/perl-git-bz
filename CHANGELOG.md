@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - [#30] Fix UTF-8 "Wide character in print" warnings in apply command progress indicators
+- [#32] Improve apply command progress output: show all patches being applied and add summary after preparing
 
 ## [1.0.1] - 2025-12-09
 
