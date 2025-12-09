@@ -42,6 +42,8 @@ use open ':std', ':utf8';
 
 use GitBz::Exception;
 
+use Text::UnicodeBox::Table;
+
 =head2 get
 
     my $bug = GitBz::Bug->get($client, $bug_number);
@@ -252,8 +254,6 @@ sub _display_changes {
 
     # Clear the current line (spinner)
     print "\r\033[K";
-
-    require Text::UnicodeBox::Table;
 
     my $table = Text::UnicodeBox::Table->new();
     $table->add_row(@$_) for @{ $self->{_display_rows} };
