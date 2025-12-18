@@ -576,7 +576,7 @@ sub prepare_patch_files {
         # Decode base64 data from REST API
         my $decoded_patch = decode_base64( $att->{data} );
 
-        open my $fh, '>', $filename or die "Cannot write $filename: $!";
+        open my $fh, '>:raw', $filename or die "Cannot write $filename: $!";
         print $fh $decoded_patch;
         close $fh;
 
