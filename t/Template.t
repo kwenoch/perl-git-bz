@@ -38,10 +38,11 @@ sub create_bug {
             cf_patch_complexity => $data{cf_patch_complexity},
             cf_sponsors         => $data{cf_sponsors},
             cf_sponsorship      => $data{cf_sponsorship},
+            qa_contact          => $data{qa_contact},
         },
         _attachments => [],
     }, 'GitBz::Bug';
-    
+
     # Add accessor methods
     no strict 'refs';
     *{'GitBz::Bug::id'}                  = sub { $_[0]->{data}->{id} };
@@ -52,7 +53,8 @@ sub create_bug {
     *{'GitBz::Bug::cf_patch_complexity'} = sub { $_[0]->{data}->{cf_patch_complexity} };
     *{'GitBz::Bug::cf_sponsors'}         = sub { $_[0]->{data}->{cf_sponsors} };
     *{'GitBz::Bug::cf_sponsorship'}      = sub { $_[0]->{data}->{cf_sponsorship} };
-    
+    *{'GitBz::Bug::qa_contact'}          = sub { $_[0]->{data}->{qa_contact} };
+
     return $bug;
 }
 
@@ -260,6 +262,68 @@ END
     my $updates = GitBz::Template::parse_bug_fields($content, $bug);
     
     ok(!$updates->{cf_sponsorship}, 'Does not auto-update when already Sponsored');
+};
+
+subtest 'generate_bug_fields() - qa_contact field with value' => sub {
+    plan tests => 2;
+
+    my $bug = create_bug( qa_contact => 'qa@example.com' );
+    my $client = create_client();
+
+    my $mock_workflow = Test::MockModule->new('GitBz::StatusWorkflow');
+    $mock_workflow->mock('new', sub { bless {}, 'GitBz::StatusWorkflow' });
+    $mock_workflow->mock('get_next_status_values', sub { return [] });
+
+    my $mock_progress = Test::MockModule->new('GitBz::Progress');
+    $mock_progress->mock('with_spinner', sub { return [] });
+
+    my $template = GitBz::Template::generate_bug_fields( $bug, $client );
+
+    like( $template, qr/# Current QA-contact: qa\@example\.com/, 'Shows current QA contact' );
+    like( $template, qr/# QA-contact: user\@example\.com/,       'Shows QA contact template' );
+};
+
+subtest 'generate_bug_fields() - qa_contact field empty' => sub {
+    plan tests => 1;
+
+    my $bug = create_bug();
+    my $client = create_client();
+
+    my $mock_workflow = Test::MockModule->new('GitBz::StatusWorkflow');
+    $mock_workflow->mock('new', sub { bless {}, 'GitBz::StatusWorkflow' });
+    $mock_workflow->mock('get_next_status_values', sub { return [] });
+
+    my $mock_progress = Test::MockModule->new('GitBz::Progress');
+    $mock_progress->mock('with_spinner', sub { return [] });
+
+    my $template = GitBz::Template::generate_bug_fields( $bug, $client );
+
+    like( $template, qr/# Current QA-contact:\s*\n/, 'Shows empty when not set' );
+};
+
+subtest 'parse_bug_fields() - qa_contact parsing' => sub {
+    plan tests => 2;
+
+    my $bug = create_bug();
+    my $content = "QA-contact: newqa\@example.com\n";
+
+    my $updates = GitBz::Template::parse_bug_fields( $content, $bug );
+    is( $updates->{qa_contact}, 'newqa@example.com', 'Parses QA contact' );
+
+    # Test with whitespace
+    my $content2 = "QA-contact:   padded\@example.com   \n";
+    my $updates2 = GitBz::Template::parse_bug_fields( $content2, $bug );
+    is( $updates2->{qa_contact}, 'padded@example.com', 'Trims whitespace' );
+};
+
+subtest 'parse_bug_fields() - qa_contact empty value' => sub {
+    plan tests => 1;
+
+    my $bug = create_bug( qa_contact => 'old@example.com' );
+    my $content = "QA-contact: \n";
+
+    my $updates = GitBz::Template::parse_bug_fields( $content, $bug );
+    is( $updates->{qa_contact}, '', 'Allows empty string (clearing field)' );
 };
 
 done_testing();

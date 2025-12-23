@@ -86,6 +86,12 @@ sub generate_bug_fields {
     }
     $template .= "\n";
 
+    # Add QA Contact field
+    my $qa_contact = $bug->qa_contact || "";
+    $template .= "# Current QA-contact: $qa_contact\n";
+    $template .= "# QA-contact: user\@example.com\n";
+    $template .= "\n";
+
     # Add patch complexity options
     my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
@@ -197,6 +203,10 @@ sub parse_bug_fields {
 
         if ( $line =~ /^\s*Status\s*:\s*(.+)/ ) {
             $bug_updates{status} = $1;
+        } elsif ( $line =~ /^\s*QA-contact\s*:\s*(.*)/ ) {
+            my $value = $1;
+            $value =~ s/^\s+|\s+$//g;  # Trim whitespace
+            $bug_updates{qa_contact} = $value;  # Empty string allowed (clears field)
         } elsif ( $line =~ /^\s*Patch-complexity\s*:\s*(.+)/ ) {
             $bug_updates{cf_patch_complexity} = $1;
         } elsif ( $line =~ /^\s*Sponsors\s*:\s*(.+)/ ) {

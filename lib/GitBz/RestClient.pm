@@ -143,7 +143,7 @@ sub get_bug {
     my ( $self, $bug_id ) = @_;
 
     my $url = sprintf(
-        "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity,cf_sponsors,cf_sponsorship",
+        "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity,cf_sponsors,cf_sponsorship,qa_contact",
         $self->{base_url}, $bug_id
     );
     my $response = $self->{ua}->get($url);

@@ -81,6 +81,7 @@ sub depends_on          { $_[0]->{data}->{depends_on} || [] }
 sub cf_patch_complexity { $_[0]->{data}->{cf_patch_complexity} }
 sub cf_sponsors         { $_[0]->{data}->{cf_sponsors} }
 sub cf_sponsorship      { $_[0]->{data}->{cf_sponsorship} }
+sub qa_contact          { $_[0]->{data}->{qa_contact} }
 
 =head2 attachments
 
@@ -130,6 +131,7 @@ sub set_field {
         cf_patch_complexity => 'Patch-complexity',
         cf_sponsors         => 'Sponsors',
         cf_sponsorship      => 'Sponsorship',
+        qa_contact          => 'QA-contact',
     );
 
     my $current = $self->can($field) ? $self->$field : undef;

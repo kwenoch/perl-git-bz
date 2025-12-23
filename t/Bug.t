@@ -38,6 +38,7 @@ sub create_bug {
             cf_patch_complexity => $data{cf_patch_complexity},
             cf_sponsors         => $data{cf_sponsors},
             cf_sponsorship      => $data{cf_sponsorship},
+            qa_contact          => $data{qa_contact},
         },
         _attachments     => [],
         _display_rows    => [],
@@ -279,6 +280,36 @@ subtest 'apply_updates() tests' => sub {
         is(
             scalar keys %{ $bug->{_pending_updates} }, 0,
             'apply_updates clears pending updates after calling update'
+        );
+    }
+};
+
+subtest 'qa_contact field tests' => sub {
+    plan tests => 4;
+
+    # Test 1: qa_contact accessor returns value
+    {
+        my $bug = create_bug( qa_contact => 'qa@example.com' );
+        is( $bug->qa_contact, 'qa@example.com', 'qa_contact accessor returns value' );
+    }
+
+    # Test 2: qa_contact accessor returns undef when not set
+    {
+        my $bug = create_bug();
+        is( $bug->qa_contact, undef, 'qa_contact returns undef when not set' );
+    }
+
+    # Test 3: set_field() with qa_contact
+    {
+        my $bug = create_bug( qa_contact => 'old@example.com' );
+        $bug->set_field( 'qa_contact', 'new@example.com' );
+        is(
+            $bug->{_pending_updates}{qa_contact}, 'new@example.com',
+            'set_field adds qa_contact to pending updates'
+        );
+        is_deeply(
+            $bug->{_display_rows}[0], [ 'QA-contact', 'old@example.com', '→', 'new@example.com' ],
+            'display row has correct format'
         );
     }
 };

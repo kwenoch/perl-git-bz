@@ -321,7 +321,7 @@ sub update_bug {
     for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
-        } elsif ( $line !~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends)\s*:/ ) {
+        } elsif ( $line !~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/ ) {
             push @comment_lines, $line;
         }
     }
@@ -330,7 +330,7 @@ sub update_bug {
     $comment =~ s/^\s+|\s+$//g;
 
     # Early return if no changes
-    return 0 unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends)\s*:/m || $comment || @obsoletes;
+    return 0 unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/m || $comment || @obsoletes;
 
     # Only fetch bug data if we have changes to process
     my $bug = GitBz::Progress::with_spinner(
@@ -349,6 +349,9 @@ sub update_bug {
     my %actual_changes;
     if ( $update_params->{status} && $update_params->{status} ne $bug->status ) {
         $actual_changes{status} = $update_params->{status};
+    }
+    if ( exists $update_params->{qa_contact} && $update_params->{qa_contact} ne ( $bug->qa_contact || '' ) ) {
+        $actual_changes{qa_contact} = $update_params->{qa_contact};
     }
     if ( $update_params->{resolution} && $update_params->{resolution} ne ( $bug->resolution || '' ) ) {
         $actual_changes{resolution} = $update_params->{resolution};
@@ -378,6 +381,7 @@ sub update_bug {
 
         # Queue field updates
         $bug->set_field( 'status',     $actual_changes{status} )     if $actual_changes{status};
+        $bug->set_field( 'qa_contact', $actual_changes{qa_contact} ) if exists $actual_changes{qa_contact};
         $bug->set_field( 'resolution', $actual_changes{resolution} ) if $actual_changes{resolution};
         $bug->set_field( 'cf_patch_complexity', $actual_changes{cf_patch_complexity} )
             if $actual_changes{cf_patch_complexity};
