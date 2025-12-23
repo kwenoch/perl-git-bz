@@ -60,7 +60,10 @@ sub create_bug {
 
 # Mock client
 sub create_client {
-    return bless {}, 'MockClient';
+    my %data = @_;
+    return bless {
+        username => $data{username} || 'test@example.com',
+    }, 'MockClient';
 }
 
 subtest 'generate_bug_fields() - basic fields' => sub {
@@ -280,7 +283,7 @@ subtest 'generate_bug_fields() - qa_contact field with value' => sub {
     my $template = GitBz::Template::generate_bug_fields( $bug, $client );
 
     like( $template, qr/# Current QA-contact: qa\@example\.com/, 'Shows current QA contact' );
-    like( $template, qr/# QA-contact: user\@example\.com/,       'Shows QA contact template' );
+    like( $template, qr/# QA-contact: test\@example\.com/,       'Shows current user as default' );
 };
 
 subtest 'generate_bug_fields() - qa_contact field empty' => sub {

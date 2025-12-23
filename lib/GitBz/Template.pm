@@ -88,8 +88,9 @@ sub generate_bug_fields {
 
     # Add QA Contact field
     my $qa_contact = $bug->qa_contact || "";
+    my $current_user = $client->{username} || 'user@example.com';
     $template .= "# Current QA-contact: $qa_contact\n";
-    $template .= "# QA-contact: user\@example.com\n";
+    $template .= "# QA-contact: $current_user\n";
     $template .= "\n";
 
     # Add patch complexity options
