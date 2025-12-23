@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.3] - TBD
 
+### Added
+- [#36] Support for QA Contact field in `attach -e` and `edit` commands
+  - View and edit QA Contact field in interactive editor
+  - Template defaults to current user's email for easy self-assignment
+  - Support for clearing the field with empty value
+  - Field appears after Status in the editor template
+
 ### Fixed
 - [#35] Write dowloaded attachments in raw mode to avoid encoding corruption
 
