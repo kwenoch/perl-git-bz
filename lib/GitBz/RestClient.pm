@@ -274,6 +274,45 @@ sub get_field_values {
     return [];
 }
 
+=head2 search_users
+
+    my $users = $client->search_users($search_term);
+
+Searches for users matching the given search term.
+Returns arrayref of user hashes with 'email', 'real_name', and 'id' keys.
+
+=cut
+
+sub search_users {
+    my ( $self, $search_term ) = @_;
+
+    return [] unless $search_term;
+
+    # Get authentication token
+    my $token = $self->get_token();
+
+    # Build URL with token for authentication
+    my $url = sprintf( "%s/user?match=%s", $self->{base_url}, $search_term );
+    $url .= "&token=$token" if $token;
+
+    my $response = $self->{ua}->get($url);
+
+    if ( !$response->is_success ) {
+        return [];
+    }
+
+    my $data = decode_json( $response->content );
+
+    # Return users array with relevant fields
+    return [ map {
+        {
+            email     => $_->{email},
+            real_name => $_->{real_name} || '',
+            id        => $_->{id}
+        }
+    } @{ $data->{users} || [] } ];
+}
+
 =head2 obsolete_attachment
 
     $client->obsolete_attachment($attachment_id);
