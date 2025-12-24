@@ -330,7 +330,10 @@ sub update_bug {
     $comment =~ s/^\s+|\s+$//g;
 
     # Early return if no changes
-    return 0 unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/m || $comment || @obsoletes;
+    return 0
+        unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/m
+        || $comment
+        || @obsoletes;
 
     # Only fetch bug data if we have changes to process
     my $bug = GitBz::Progress::with_spinner(
@@ -395,64 +398,38 @@ sub update_bug {
         my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
 
         my $update_success = eval {
-            $bug->apply_updates();
+
+            # Handle QA contact with lookup if needed
+            if ( exists $actual_changes{qa_contact} ) {
+                my $qa_email = delete $actual_changes{qa_contact};
+
+                # Apply other changes first
+                if (%actual_changes) {
+                    for my $field ( keys %actual_changes ) {
+                        $bug->set_field( $field, $actual_changes{$field} );
+                    }
+                    $bug->apply_updates();
+                }
+
+                # Handle QA contact with lookup (this will call update() directly)
+                # We need to stop the spinner first in case of user interaction
+                GitBz::Progress::stop_spinner( $spinner, '' );
+                $bug->set_qa_contact_with_lookup( $client, $qa_email );
+
+                # Restart spinner for success message
+                $spinner = GitBz::Progress::start_spinner("Updating bug fields");
+            } else {
+
+                # No QA contact, apply normally
+                $bug->apply_updates();
+            }
             1;
         };
 
         if ($@) {
             my $error = $@;
             GitBz::Progress::stop_spinner( $spinner, 'error' );
-
-            # Check if it's a 404 error related to QA contact
-            if ( exists $actual_changes{qa_contact} && $error =~ /404|not found/i ) {
-                print "\n";
-                GitBz::Progress::print_error("QA contact '$actual_changes{qa_contact}' not found");
-
-                # Iteratively search and retry until success or user cancels
-                my $attempted_email = $actual_changes{qa_contact};
-                my $retry_success   = 0;
-
-                while ( !$retry_success ) {
-                    # Offer to search for similar users
-                    my $selected_email = $self->select_qa_contact( $client, $attempted_email );
-
-                    if ( !$selected_email ) {
-                        die "Update cancelled by user\n";
-                    }
-
-                    # Retry with the selected user
-                    $bug->set_field( 'qa_contact', $selected_email );
-                    print "\nRetrying with QA contact: $selected_email\n";
-                    $spinner = GitBz::Progress::start_spinner("Updating bug fields");
-
-                    my $retry_eval = eval {
-                        $bug->apply_updates();
-                        1;
-                    };
-
-                    if ($@) {
-                        my $retry_error = $@;
-                        GitBz::Progress::stop_spinner( $spinner, 'error' );
-
-                        # Check if it's another 404 error
-                        if ( $retry_error =~ /404|not found/i ) {
-                            GitBz::Progress::print_error("QA contact '$selected_email' not found");
-                            $attempted_email = $selected_email;    # Use this as the next search term
-                            # Loop continues
-                        } else {
-                            # Different error, rethrow
-                            die $retry_error;
-                        }
-                    } else {
-                        # Success!
-                        GitBz::Progress::stop_spinner( $spinner, 'success', "Bug fields updated" );
-                        $changed       = 1;
-                        $retry_success = 1;
-                    }
-                }
-            } else {
-                die $error;
-            }
+            die $error;
         } else {
             GitBz::Progress::stop_spinner( $spinner, 'success', "Bug fields updated" );
             $changed = 1;
@@ -501,73 +478,6 @@ sub extract_bug_ref {
 
     if ( $message =~ /\b[Bb]ug\s+(\d+)\b/ ) {
         return $1;
-    }
-
-    return;
-}
-
-=head2 select_qa_contact
-
-    my $email = $edit->select_qa_contact($client, $invalid_email);
-
-Searches for users matching the invalid email and presents a selection menu.
-Returns the selected email, or undef if cancelled.
-
-=cut
-
-sub select_qa_contact {
-    my ( $self, $client, $invalid_email ) = @_;
-
-    # Extract the local part (before @) from the invalid email
-    my $search_term;
-    if ( $invalid_email =~ /^([^@]+)@/ ) {
-        $search_term = $1;
-    } else {
-        $search_term = $invalid_email;
-    }
-
-    # Search for users whose email begins with the local part
-    print "\nSearching for similar users (begins with '$search_term')...\n";
-    my $users = GitBz::Progress::with_spinner(
-        "Searching users",
-        sub {
-            return $client->search_users($search_term);
-        },
-        1
-    );
-
-    if ( !@$users ) {
-        print "No similar users found.\n";
-        print "Would you like to enter a different QA contact? [y/N]: ";
-        my $response = <STDIN>;
-        chomp $response;
-
-        if ( $response =~ /^[yY]/ ) {
-            print "Enter QA contact email: ";
-            my $new_email = <STDIN>;
-            chomp $new_email;
-            $new_email =~ s/^\s+|\s+$//g;
-            return $new_email if $new_email;
-        }
-
-        return;
-    }
-
-    # Present users for selection
-    print "\nFound " . scalar(@$users) . " similar user(s):\n\n";
-
-    for my $i ( 0 .. $#$users ) {
-        my $user = $users->[$i];
-        my $display_name = $user->{real_name} ? "$user->{real_name} <$user->{email}>" : $user->{email};
-        print "  [$i] $display_name\n";
-    }
-
-    print "\nSelect a user by number, or press Enter to cancel: ";
-    my $selection = <STDIN>;
-    chomp $selection;
-
-    if ( $selection =~ /^\d+$/ && $selection >= 0 && $selection <= $#$users ) {
-        return $users->[$selection]{email};
     }
 
     return;

@@ -141,7 +141,7 @@ sub set_field {
         $self->{_pending_updates}{$field} = $value;
 
         my $label = $field_labels{$field} || ucfirst($field);
-        my $old   = (defined $current && $current ne '') ? $current : '---';
+        my $old   = ( defined $current && $current ne '' ) ? $current : '---';
         $self->add_display_row( $label, $old, '→', $value );
     }
 }
@@ -280,6 +280,145 @@ sub update {
     my ( $self, %params ) = @_;
 
     return $self->{client}->update_bug( $self->id, %params );
+}
+
+=head2 set_qa_contact_with_lookup
+
+    $bug->set_qa_contact_with_lookup($client, $email);
+
+Sets QA contact with automatic lookup and retry on failure.
+Returns 1 on success, dies on error.
+
+=cut
+
+sub set_qa_contact_with_lookup {
+    my ( $self, $client, $email ) = @_;
+
+    # Try to update with the provided email
+    my $success = eval {
+        $self->update( qa_contact => $email );
+        1;
+    };
+
+    if ($@) {
+        my $error = $@;
+
+        # Check if it's a 404 error related to QA contact
+        if ( $error =~ /404|not found/i ) {
+
+            # Iteratively search and retry until success or user cancels
+            my $attempted_email = $email;
+
+            while (1) {
+                print "\n";
+                GitBz::Progress::print_error("QA contact '$attempted_email' not found");
+
+                # Offer to search for similar users
+                my $selected_email = $self->_select_qa_contact( $client, $attempted_email );
+
+                if ( !$selected_email ) {
+                    die "Update cancelled by user\n";
+                }
+
+                print "\nRetrying with QA contact: $selected_email\n";
+
+                my $retry_success = eval {
+                    $self->update( qa_contact => $selected_email );
+                    1;
+                };
+
+                if ($@) {
+                    my $retry_error = $@;
+
+                    # Check if it's another 404 error
+                    if ( $retry_error =~ /404|not found/i ) {
+                        $attempted_email = $selected_email;
+                    } else {
+
+                        # Different error, rethrow
+                        die $retry_error;
+                    }
+                } else {
+
+                    # Success!
+                    return 1;
+                }
+            }
+        } else {
+
+            # Different error, rethrow
+            die $error;
+        }
+    }
+
+    return 1;
+}
+
+=head2 _select_qa_contact
+
+    my $email = $bug->_select_qa_contact($client, $invalid_email);
+
+Internal method to search for users and present selection menu.
+Returns selected email or undef if cancelled.
+
+=cut
+
+sub _select_qa_contact {
+    my ( $self, $client, $invalid_email ) = @_;
+
+    # Extract the local part (before @) from the invalid email
+    my $search_term;
+    if ( $invalid_email =~ /^([^@]+)@/ ) {
+        $search_term = $1;
+    } else {
+        $search_term = $invalid_email;
+    }
+
+    # Search for users whose email begins with the local part
+    print "\nSearching for similar users (begins with '$search_term')...\n";
+    my $users = GitBz::Progress::with_spinner(
+        "Searching users",
+        sub {
+            return $client->search_users($search_term);
+        },
+        1
+    );
+
+    if ( !@$users ) {
+        print "No similar users found.\n";
+        print "Would you like to enter a different QA contact? [y/N]: ";
+        my $response = <STDIN>;
+        chomp $response;
+
+        if ( $response =~ /^[yY]/ ) {
+            print "Enter QA contact email: ";
+            my $new_email = <STDIN>;
+            chomp $new_email;
+            $new_email =~ s/^\s+|\s+$//g;
+            return $new_email if $new_email;
+        }
+
+        return;
+    }
+
+    # Present users for selection
+    print "\nFound " . scalar(@$users) . " similar user(s):\n\n";
+
+    for my $i ( 0 .. $#$users ) {
+        my $user         = $users->[$i];
+        my $display_name = $user->{real_name} ? "$user->{real_name} <$user->{email}>" : $user->{email};
+        print "  [$i] $display_name\n";
+    }
+
+    print "\nSelect a user by number, or press Enter to cancel: ";
+    my $selection = <STDIN>;
+    chomp $selection;
+
+    if ( $selection =~ /^\d+$/ && $selection >= 0 && $selection <= $#$users ) {
+        return $users->[$selection]{email};
+    }
+
+    return;
 }
 
 =head2 add_attachment
