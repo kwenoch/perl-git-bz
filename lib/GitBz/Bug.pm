@@ -141,7 +141,7 @@ sub set_field {
         $self->{_pending_updates}{$field} = $value;
 
         my $label = $field_labels{$field} || ucfirst($field);
-        my $old   = $current              || '---';
+        my $old   = (defined $current && $current ne '') ? $current : '---';
         $self->add_display_row( $label, $old, '→', $value );
     }
 }
