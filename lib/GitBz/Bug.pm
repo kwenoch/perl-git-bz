@@ -286,7 +286,8 @@ sub update {
 
     $bug->set_qa_contact_with_lookup($client, $email);
 
-Sets QA contact with automatic lookup and retry on failure.
+Sets QA contact with automatic validation and lookup.
+Validates the email exists before attempting update.
 Returns 1 on success, dies on error.
 
 =cut
@@ -294,19 +295,16 @@ Returns 1 on success, dies on error.
 sub set_qa_contact_with_lookup {
     my ( $self, $client, $email ) = @_;
 
-    # Try to update with the provided email
-    my $success = eval {
-        $self->update( qa_contact => $email );
-        1;
-    };
+    my $validated_email = $email;
 
-    if ($@) {
-        my $error = $@;
+    # Skip validation if setting to our own login (we know we exist)
+    unless ( $email eq $client->{username} ) {
 
-        # Check if it's a 404 error related to QA contact
-        if ( $error =~ /404|not found/i ) {
+        # Validate email exists before attempting update
+        my $is_valid = $client->validate_user($email);
 
-            # Iteratively search and retry until success or user cancels
+        # If not valid, enter search/select flow
+        unless ($is_valid) {
             my $attempted_email = $email;
 
             while (1) {
@@ -320,36 +318,23 @@ sub set_qa_contact_with_lookup {
                     die "Update cancelled by user\n";
                 }
 
-                print "\nRetrying with QA contact: $selected_email\n";
+                print "\nValidating QA contact: $selected_email\n";
 
-                my $retry_success = eval {
-                    $self->update( qa_contact => $selected_email );
-                    1;
-                };
-
-                if ($@) {
-                    my $retry_error = $@;
-
-                    # Check if it's another 404 error
-                    if ( $retry_error =~ /404|not found/i ) {
-                        $attempted_email = $selected_email;
-                    } else {
-
-                        # Different error, rethrow
-                        die $retry_error;
-                    }
+                # Validate the selected email
+                if ( $client->validate_user($selected_email) ) {
+                    $validated_email = $selected_email;
+                    last;
                 } else {
 
-                    # Success!
-                    return 1;
+                    # Selected email is also invalid, try again
+                    $attempted_email = $selected_email;
                 }
             }
-        } else {
-
-            # Different error, rethrow
-            die $error;
         }
     }
+
+    # Update with validated email
+    $self->update( qa_contact => $validated_email );
 
     return 1;
 }

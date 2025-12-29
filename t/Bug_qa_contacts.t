@@ -56,19 +56,21 @@ sub create_bug {
 
 # Mock client
 sub create_mock_client {
-    my ($search_result) = @_;
+    my ($search_result, $validate_result, $username) = @_;
 
     my $client = Test::MockObject->new();
-    $client->mock( 'search_users', sub { return $search_result || []; } );
+    $client->mock( 'search_users',  sub { return $search_result || []; } );
+    $client->mock( 'validate_user', sub { return $validate_result // 1; } );
+    $client->{username} = $username || 'test@example.com';
 
     return $client;
 }
 
-subtest 'set_qa_contact_with_lookup - success on first try' => sub {
+subtest 'set_qa_contact_with_lookup - success with valid email' => sub {
     plan tests => 2;
 
     my $bug         = create_bug();
-    my $mock_client = create_mock_client();
+    my $mock_client = create_mock_client( undef, 1 );    # validate_user returns true
 
     # Mock update to succeed
     my $update_called = 0;
@@ -80,14 +82,32 @@ subtest 'set_qa_contact_with_lookup - success on first try' => sub {
     is( $update_called, 1, 'update called once' );
 };
 
+subtest 'set_qa_contact_with_lookup - skip validation for own login' => sub {
+    plan tests => 3;
+
+    my $bug         = create_bug();
+    my $mock_client = create_mock_client( undef, undef, 'myuser@example.com' );
+
+    # Mock update to succeed
+    my $update_called   = 0;
+    my $validate_called = 0;
+
+    $bug->mock( 'update', sub { $update_called++; return 1; } );
+    $mock_client->mock( 'validate_user', sub { $validate_called++; return 1; } );
+
+    my $result = $bug->set_qa_contact_with_lookup( $mock_client, 'myuser@example.com' );
+
+    is( $result,          1, 'Returns 1 on success' );
+    is( $update_called,   1, 'update called once' );
+    is( $validate_called, 0, 'validate_user not called for own login' );
+};
+
 subtest 'set_qa_contact_with_lookup - user cancels selection' => sub {
     plan tests => 1;
 
-    my $bug         = create_bug();
-    my $mock_client = create_mock_client( [ { email => 'john@example.com', real_name => 'John Doe' } ] );
-
-    # Mock update to fail
-    $bug->mock( 'update', sub { die "404 not found error"; } );
+    my $bug = create_bug();
+    my $mock_client
+        = create_mock_client( [ { email => 'john@example.com', real_name => 'John Doe' } ], 0 );    # validate_user returns false
 
     # Mock STDIN for user cancellation (empty input)
     my $input = "\n";
@@ -98,6 +118,41 @@ subtest 'set_qa_contact_with_lookup - user cancels selection' => sub {
         $bug->set_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
     }
     qr/Update cancelled by user/, 'Dies when user cancels';
+};
+
+subtest 'set_qa_contact_with_lookup - iterative validation with eventual success' => sub {
+    plan tests => 2;
+
+    my $bug         = create_bug();
+    my $mock_client = create_mock_client(
+        [ { email => 'john@example.com', real_name => 'John Doe' } ],
+        undef    # Will be mocked dynamically below
+    );
+
+    # Mock validate_user to fail first time, succeed second time
+    my $validate_count = 0;
+    $mock_client->mock(
+        'validate_user',
+        sub {
+            my ( $self, $email ) = @_;
+            $validate_count++;
+            return $validate_count > 1 ? 1 : 0;    # Fail first, succeed second
+        }
+    );
+
+    # Mock update to track if it's called
+    my $update_called = 0;
+    $bug->mock( 'update', sub { $update_called++; return 1; } );
+
+    # Mock STDIN for selecting user (index 0), then selecting again
+    my $input = "0\n0\n";
+    local *STDIN;
+    open STDIN, '<', \$input;
+
+    my $result = $bug->set_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
+
+    is( $result,        1, 'Returns 1 on success after iteration' );
+    is( $update_called, 1, 'update called once after validation succeeds' );
 };
 
 subtest '_select_qa_contact - no users found, user enters new email' => sub {

@@ -280,6 +280,44 @@ sub get_field_values {
     return [];
 }
 
+=head2 validate_user
+
+    my $is_valid = $client->validate_user($email);
+
+Validates that a user with the given email exists in Bugzilla.
+Returns 1 if user exists, 0 otherwise.
+
+=cut
+
+sub validate_user {
+    my ( $self, $email ) = @_;
+
+    return 0 unless $email;
+
+    # Get authentication token
+    my $token = $self->get_token();
+
+    # Build URL with token for authentication
+    my $url = sprintf( "%s/user?match=%s", $self->{base_url}, $email );
+    $url .= "&token=$token" if $token;
+
+    my $response = $self->{ua}->get($url);
+
+    if ( !$response->is_success ) {
+        return 0;
+    }
+
+    my $data = decode_json( $response->content );
+
+    # Check if we found an exact match
+    my $users = $data->{users} || [];
+    for my $user (@$users) {
+        return 1 if $user->{email} eq $email;
+    }
+
+    return 0;
+}
+
 =head2 search_users
 
     my $users = $client->search_users($search_term);
