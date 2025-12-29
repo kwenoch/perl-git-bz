@@ -279,9 +279,9 @@ sub stop_spinner {
 
         # Not a terminal, just print status
         if ( $status eq 'success' ) {
-            print " " . colored( ['green'], '✓' ) . "\n" unless $clear_on_success;
+            print " " . colored( ['green'], '✔︎' ) . "\n" unless $clear_on_success;
         } else {
-            print " " . colored( ['red'], '✗' ) . "\n";
+            print " " . colored( ['red'], '✘' ) . "\n";
         }
         return;
     }
@@ -294,15 +294,15 @@ sub stop_spinner {
         # If clear_on_success, just clear the line and don't print anything
         unless ($clear_on_success) {
             # Truncate message to fit terminal width
-            # Prefix: "  ✓ " = 4 chars
+            # Prefix: "  ✔︎ " = 4 chars
             my $truncated_msg = truncate_message( $message, 4, 0 );
-            print colored( ['green'], '  ✓ ' ) . "$truncated_msg\n";
+            print colored( ['green'], '  ✔︎ ' ) . "$truncated_msg\n";
         }
     } else {
         # Truncate message to fit terminal width
-        # Prefix: "  ✗ " = 4 chars
+        # Prefix: "  ✘ " = 4 chars
         my $truncated_msg = truncate_message( $message, 4, 0 );
-        print colored( ['red'], '  ✗ ' ) . "$truncated_msg\n";
+        print colored( ['red'], '  ✘ ' ) . "$truncated_msg\n";
     }
 }
 
@@ -319,14 +319,14 @@ sub print_success {
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
     # Truncate message to fit terminal width
-    # Prefix: "  ✓ " = 4 chars
+    # Prefix: "  ✔︎ " = 4 chars
     my $truncated_msg = truncate_message( $message, 4, 0 );
-    print colored( ['green'], '  ✓ ' ) . "$truncated_msg\n";
+    print colored( ['green'], '  ✔︎ ' ) . "$truncated_msg\n";
 }
 
 =head2 print_error
 
-Print an error message with a red X.
+Print an error message with a red ✘.
 
     GitBz::Progress::print_error("Failed to upload attachment");
 
@@ -337,9 +337,9 @@ sub print_error {
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
     # Truncate message to fit terminal width
-    # Prefix: "  ✗ " = 4 chars
+    # Prefix: "  ✘ " = 4 chars
     my $truncated_msg = truncate_message( $message, 4, 0 );
-    print colored( ['red'], '  ✗ ' ) . "$truncated_msg\n";
+    print colored( ['red'], '  ✘ ' ) . "$truncated_msg\n";
 }
 
 =head2 print_info
@@ -465,17 +465,17 @@ sub update_progress_line {
     return if $VERBOSITY == 0;
 
     # Truncate message to fit terminal width
-    # Prefix: "  ✓ " = 4 chars
+    # Prefix: "  ✔︎ " = 4 chars
     my $truncated_msg = truncate_message( $message, 4, 0 );
 
     # Level 2+: verbose mode or non-TTY: print each line
     if ( $VERBOSITY >= 2 || !$is_tty ) {
-        print "  ✓ $truncated_msg\n";
+        print "  ✔︎ $truncated_msg\n";
     } else {
 
         # Level 1 with TTY: clear line and print new status
         print "\r\e[K";
-        print colored( ['green'], '  ✓ ' ) . "$truncated_msg";
+        print colored( ['green'], '  ✔︎ ' ) . "$truncated_msg";
         STDOUT->flush();
     }
 }
