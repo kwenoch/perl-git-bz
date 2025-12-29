@@ -4,7 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
 
+### Fixed
+
+- [#33] Fix visual glitches from long progress messages
+  - Add terminal width detection with caching for proper message display
+  - Truncate long messages with ellipsis (…) to prevent line wrapping
+  - Prevent visual artifacts where carriage returns couldn't clear previous spinner frames
+  - Comprehensive unit tests covering terminal width detection and message truncation
 ## [1.0.3] - 2025-12-24
 
 ### Added
