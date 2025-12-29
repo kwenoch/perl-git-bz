@@ -35,6 +35,10 @@ our @SPINNER_CHARS = qw(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏);
 # Global verbosity level (0 = quiet, 1 = default, 2+ = verbose)
 our $VERBOSITY = 1;
 
+# Cache terminal width (updated periodically)
+our $TERMINAL_WIDTH;
+our $LAST_WIDTH_CHECK = 0;
+
 =head1 NAME
 
 GitBz::Progress - Progress indicators and feedback for GitBz
@@ -94,6 +98,78 @@ sub get_verbosity {
     return $VERBOSITY;
 }
 
+=head2 get_terminal_width
+
+Get the current terminal width in columns.
+Caches the result for 5 seconds to avoid excessive system calls.
+Falls back to 80 columns if width cannot be determined.
+
+    my $width = GitBz::Progress::get_terminal_width();
+
+=cut
+
+sub get_terminal_width {
+    my $now = time();
+
+    # Use cached value if recent (within 5 seconds)
+    if ( defined $TERMINAL_WIDTH && ( $now - $LAST_WIDTH_CHECK ) < 5 ) {
+        return $TERMINAL_WIDTH;
+    }
+
+    $LAST_WIDTH_CHECK = $now;
+
+    # Try to get width from tput
+    my $width = `tput cols 2>/dev/null`;
+    chomp $width if defined $width;
+
+    if ( $width && $width =~ /^\d+$/ && $width > 0 ) {
+        $TERMINAL_WIDTH = $width;
+        return $TERMINAL_WIDTH;
+    }
+
+    # Try COLUMNS environment variable
+    if ( $ENV{COLUMNS} && $ENV{COLUMNS} =~ /^\d+$/ && $ENV{COLUMNS} > 0 ) {
+        $TERMINAL_WIDTH = $ENV{COLUMNS};
+        return $TERMINAL_WIDTH;
+    }
+
+    # Fallback to 80 columns
+    $TERMINAL_WIDTH = 80;
+    return $TERMINAL_WIDTH;
+}
+
+=head2 truncate_message
+
+Truncate a message to fit within the terminal width, accounting for prefix and suffix.
+Adds an ellipsis (…) if truncation occurs.
+
+    my $truncated = GitBz::Progress::truncate_message($message, $prefix_len, $suffix_len);
+
+=cut
+
+sub truncate_message {
+    my ( $message, $prefix_len, $suffix_len ) = @_;
+
+    $prefix_len //= 0;
+    $suffix_len //= 0;
+
+    my $terminal_width = get_terminal_width();
+    my $available_width = $terminal_width - $prefix_len - $suffix_len;
+
+    # If message fits, return as-is
+    # Use length() to count characters (UTF-8 aware in Modern::Perl context)
+    if ( length($message) <= $available_width ) {
+        return $message;
+    }
+
+    # Truncate and add ellipsis
+    # Reserve 1 character for the ellipsis
+    my $truncate_at = $available_width - 1;
+    $truncate_at = 1 if $truncate_at < 1;  # Ensure at least 1 character
+
+    return substr( $message, 0, $truncate_at ) . '…';
+}
+
 =head2 start_spinner
 
 Start an animated spinner with a message.
@@ -141,11 +217,17 @@ sub start_spinner {
         # Child process - animate the spinner
         # Re-enable UTF-8 output (not inherited from parent)
         binmode(STDOUT, ':utf8');
-        
+
         my $frame = 0;
         while (1) {
             my $spinner_char = $SPINNER_CHARS[ $frame % @SPINNER_CHARS ];
-            print "\r" . "  " . colored( ['cyan'], $spinner_char ) . " $message...";
+
+            # Truncate message to fit terminal width
+            # Prefix: "  " (2) + spinner (1) + " " (1) = 4 chars
+            # Suffix: "..." = 3 chars
+            my $truncated_msg = truncate_message( $message, 4, 3 );
+
+            print "\r" . "  " . colored( ['cyan'], $spinner_char ) . " $truncated_msg...";
             STDOUT->flush();
             usleep(80_000);    # 80ms between frames
             $frame++;
@@ -211,10 +293,16 @@ sub stop_spinner {
 
         # If clear_on_success, just clear the line and don't print anything
         unless ($clear_on_success) {
-            print colored( ['green'], '  ✓ ' ) . "$message\n";
+            # Truncate message to fit terminal width
+            # Prefix: "  ✓ " = 4 chars
+            my $truncated_msg = truncate_message( $message, 4, 0 );
+            print colored( ['green'], '  ✓ ' ) . "$truncated_msg\n";
         }
     } else {
-        print colored( ['red'], '  ✗ ' ) . "$message\n";
+        # Truncate message to fit terminal width
+        # Prefix: "  ✗ " = 4 chars
+        my $truncated_msg = truncate_message( $message, 4, 0 );
+        print colored( ['red'], '  ✗ ' ) . "$truncated_msg\n";
     }
 }
 
@@ -230,7 +318,10 @@ sub print_success {
     my ($message) = @_;
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
-    print colored( ['green'], '  ✓ ' ) . "$message\n";
+    # Truncate message to fit terminal width
+    # Prefix: "  ✓ " = 4 chars
+    my $truncated_msg = truncate_message( $message, 4, 0 );
+    print colored( ['green'], '  ✓ ' ) . "$truncated_msg\n";
 }
 
 =head2 print_error
@@ -245,7 +336,10 @@ sub print_error {
     my ($message) = @_;
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
-    print colored( ['red'], '  ✗ ' ) . "$message\n";
+    # Truncate message to fit terminal width
+    # Prefix: "  ✗ " = 4 chars
+    my $truncated_msg = truncate_message( $message, 4, 0 );
+    print colored( ['red'], '  ✗ ' ) . "$truncated_msg\n";
 }
 
 =head2 print_info
@@ -260,7 +354,10 @@ sub print_info {
     my ($message) = @_;
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
-    print colored( ['blue'], '  ℹ ' ) . "$message\n";
+    # Truncate message to fit terminal width
+    # Prefix: "  ℹ " = 4 chars
+    my $truncated_msg = truncate_message( $message, 4, 0 );
+    print colored( ['blue'], '  ℹ ' ) . "$truncated_msg\n";
 }
 
 =head2 print_warning
@@ -275,7 +372,10 @@ sub print_warning {
     my ($message) = @_;
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
-    print colored( ['yellow'], '  ⚠ ' ) . "$message\n";
+    # Truncate message to fit terminal width
+    # Prefix: "  ⚠ " = 4 chars
+    my $truncated_msg = truncate_message( $message, 4, 0 );
+    print colored( ['yellow'], '  ⚠ ' ) . "$truncated_msg\n";
 }
 
 =head2 progress_counter
@@ -364,14 +464,18 @@ sub update_progress_line {
     # Level 0: quiet mode, no output
     return if $VERBOSITY == 0;
 
+    # Truncate message to fit terminal width
+    # Prefix: "  ✓ " = 4 chars
+    my $truncated_msg = truncate_message( $message, 4, 0 );
+
     # Level 2+: verbose mode or non-TTY: print each line
     if ( $VERBOSITY >= 2 || !$is_tty ) {
-        print "  ✓ $message\n";
+        print "  ✓ $truncated_msg\n";
     } else {
 
         # Level 1 with TTY: clear line and print new status
         print "\r\e[K";
-        print colored( ['green'], '  ✓ ' ) . "$message";
+        print colored( ['green'], '  ✓ ' ) . "$truncated_msg";
         STDOUT->flush();
     }
 }
