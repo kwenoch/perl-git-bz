@@ -110,7 +110,7 @@ sub execute {
         $self->attach_patches( $bug_ref, \@commits, \%opts );
 
         my $patch_word = @commits == 1 ? "patch" : "patches";
-        print "\n✓ Successfully attached " . scalar(@commits) . " $patch_word to bug $bug_ref\n";
+        GitBz::Progress::print_success("Successfully attached " . scalar(@commits) . " $patch_word to bug $bug_ref\n");
     } catch {
         GitBz::Exception->throw("Attach failed: $_");
     };

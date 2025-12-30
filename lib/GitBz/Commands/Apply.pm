@@ -238,17 +238,17 @@ sub handle_git_am_state {
         # Clean up temp directory if it exists
         if ( $temp_dir && -d $temp_dir ) {
             rmtree($temp_dir);
-            print "\n✗ Aborted patch application and cleaned up temp files\n";
+            GitBz::Progress::print_error("Aborted patch application and cleaned up temp files\n");
         } else {
-            print "\n✗ Aborted patch application\n";
+            GitBz::Progress::print_error("Aborted patch application\n");
         }
     } elsif ( $opts->{continue} ) {
         GitBz::Git->run( 'am', '--continue' );
-        print "\n✓ Continued with current patch\n";
+        GitBz::Progress::print_info("Continued with current patch\n");
 
         # Continue with remaining patches if any
         if ( $remaining_patches && @$remaining_patches ) {
-            print "\nContinuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n";
+            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n");
             my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
             $self->apply_patches( $patch_info, $temp_dir, $opts );
         } else {
@@ -260,11 +260,11 @@ sub handle_git_am_state {
         }
     } elsif ( $opts->{skip} ) {
         GitBz::Git->run( 'am', '--skip' );
-        print "\n⊘ Skipped current patch\n";
+        GitBz::Progress::print_warning("Skipped current patch\n");
 
         # Continue with remaining patches if any
         if ( $remaining_patches && @$remaining_patches ) {
-            print "\nContinuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n";
+            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n");
             my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
             $self->apply_patches( $patch_info, $temp_dir, $opts );
         } else {
