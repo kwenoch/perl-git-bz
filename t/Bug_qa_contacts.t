@@ -48,8 +48,8 @@ sub create_bug {
     $bug->set_always( 'qa_contact', $data{qa_contact} );
 
     # Add the actual methods we're testing
-    $bug->mock( 'set_qa_contact_with_lookup', \&GitBz::Bug::set_qa_contact_with_lookup );
-    $bug->mock( '_select_qa_contact',         \&GitBz::Bug::_select_qa_contact );
+    $bug->mock( 'validate_qa_contact_with_lookup', \&GitBz::Bug::validate_qa_contact_with_lookup );
+    $bug->mock( '_select_qa_contact',              \&GitBz::Bug::_select_qa_contact );
 
     return $bug;
 }
@@ -66,43 +66,33 @@ sub create_mock_client {
     return $client;
 }
 
-subtest 'set_qa_contact_with_lookup - success with valid email' => sub {
-    plan tests => 2;
+subtest 'validate_qa_contact_with_lookup - success with valid email' => sub {
+    plan tests => 1;
 
     my $bug         = create_bug();
     my $mock_client = create_mock_client( undef, 1 );    # validate_user returns true
 
-    # Mock update to succeed
-    my $update_called = 0;
-    $bug->mock( 'update', sub { $update_called++; return 1; } );
+    my $result = $bug->validate_qa_contact_with_lookup( $mock_client, 'valid@example.com' );
 
-    my $result = $bug->set_qa_contact_with_lookup( $mock_client, 'valid@example.com' );
-
-    is( $result,        1, 'Returns 1 on success' );
-    is( $update_called, 1, 'update called once' );
+    is( $result, 'valid@example.com', 'Returns validated email' );
 };
 
-subtest 'set_qa_contact_with_lookup - skip validation for own login' => sub {
-    plan tests => 3;
+subtest 'validate_qa_contact_with_lookup - skip validation for own login' => sub {
+    plan tests => 2;
 
     my $bug         = create_bug();
     my $mock_client = create_mock_client( undef, undef, 'myuser@example.com' );
 
-    # Mock update to succeed
-    my $update_called   = 0;
     my $validate_called = 0;
-
-    $bug->mock( 'update', sub { $update_called++; return 1; } );
     $mock_client->mock( 'validate_user', sub { $validate_called++; return 1; } );
 
-    my $result = $bug->set_qa_contact_with_lookup( $mock_client, 'myuser@example.com' );
+    my $result = $bug->validate_qa_contact_with_lookup( $mock_client, 'myuser@example.com' );
 
-    is( $result,          1, 'Returns 1 on success' );
-    is( $update_called,   1, 'update called once' );
-    is( $validate_called, 0, 'validate_user not called for own login' );
+    is( $result,          'myuser@example.com', 'Returns own email' );
+    is( $validate_called, 0,                    'validate_user not called for own login' );
 };
 
-subtest 'set_qa_contact_with_lookup - user cancels selection' => sub {
+subtest 'validate_qa_contact_with_lookup - user cancels selection' => sub {
     plan tests => 1;
 
     my $bug = create_bug();
@@ -115,13 +105,13 @@ subtest 'set_qa_contact_with_lookup - user cancels selection' => sub {
     open STDIN, '<', \$input;
 
     throws_ok {
-        $bug->set_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
+        $bug->validate_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
     }
     qr/Update cancelled by user/, 'Dies when user cancels';
 };
 
-subtest 'set_qa_contact_with_lookup - iterative validation with eventual success' => sub {
-    plan tests => 2;
+subtest 'validate_qa_contact_with_lookup - iterative validation with eventual success' => sub {
+    plan tests => 1;
 
     my $bug         = create_bug();
     my $mock_client = create_mock_client(
@@ -140,19 +130,14 @@ subtest 'set_qa_contact_with_lookup - iterative validation with eventual success
         }
     );
 
-    # Mock update to track if it's called
-    my $update_called = 0;
-    $bug->mock( 'update', sub { $update_called++; return 1; } );
-
     # Mock STDIN for selecting user (index 0), then selecting again
     my $input = "0\n0\n";
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->set_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
+    my $result = $bug->validate_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
 
-    is( $result,        1, 'Returns 1 on success after iteration' );
-    is( $update_called, 1, 'update called once after validation succeeds' );
+    is( $result, 'john@example.com', 'Returns validated email after iteration' );
 };
 
 subtest '_select_qa_contact - no users found, user enters new email' => sub {

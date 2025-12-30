@@ -282,17 +282,16 @@ sub update {
     return $self->{client}->update_bug( $self->id, %params );
 }
 
-=head2 set_qa_contact_with_lookup
+=head2 validate_qa_contact_with_lookup
 
-    $bug->set_qa_contact_with_lookup($client, $email);
+    my $validated_email = $bug->validate_qa_contact_with_lookup($client, $email);
 
-Sets QA contact with automatic validation and lookup.
-Validates the email exists before attempting update.
-Returns 1 on success, dies on error.
+Validates QA contact email with automatic lookup and user interaction.
+Returns validated email on success, dies on error/cancellation.
 
 =cut
 
-sub set_qa_contact_with_lookup {
+sub validate_qa_contact_with_lookup {
     my ( $self, $client, $email ) = @_;
 
     my $validated_email = $email;
@@ -333,10 +332,7 @@ sub set_qa_contact_with_lookup {
         }
     }
 
-    # Update with validated email
-    $self->update( qa_contact => $validated_email );
-
-    return 1;
+    return $validated_email;
 }
 
 =head2 _select_qa_contact

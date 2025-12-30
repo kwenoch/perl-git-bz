@@ -394,35 +394,19 @@ sub update_bug {
         $bug->add_comment( $actual_changes{comment}{body} )   if $actual_changes{comment};
         $bug->set_depends( %{ $actual_changes{depends_on} } ) if $actual_changes{depends_on};
 
+        # Validate QA contact BEFORE starting spinner or making any API calls
+        if ( exists $actual_changes{qa_contact} ) {
+            my $validated_email = $bug->validate_qa_contact_with_lookup( $client, $actual_changes{qa_contact} );
+
+            # Update the queued value with validated email
+            $bug->{_pending_updates}{qa_contact} = $validated_email;
+        }
+
         $bug->_display_changes();
         my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
 
         my $update_success = eval {
-
-            # Handle QA contact with lookup if needed
-            if ( exists $actual_changes{qa_contact} ) {
-                my $qa_email = delete $actual_changes{qa_contact};
-
-                # Apply other changes first
-                if (%actual_changes) {
-                    for my $field ( keys %actual_changes ) {
-                        $bug->set_field( $field, $actual_changes{$field} );
-                    }
-                    $bug->apply_updates();
-                }
-
-                # Handle QA contact with lookup (this will call update() directly)
-                # We need to stop the spinner first in case of user interaction
-                GitBz::Progress::stop_spinner( $spinner, '' );
-                $bug->set_qa_contact_with_lookup( $client, $qa_email );
-
-                # Restart spinner for success message
-                $spinner = GitBz::Progress::start_spinner("Updating bug fields");
-            } else {
-
-                # No QA contact, apply normally
-                $bug->apply_updates();
-            }
+            $bug->apply_updates();
             1;
         };
 
