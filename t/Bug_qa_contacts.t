@@ -110,14 +110,42 @@ subtest 'validate_qa_contact_with_lookup - user cancels selection' => sub {
     qr/Update cancelled by user/, 'Dies when user cancels';
 };
 
-subtest 'validate_qa_contact_with_lookup - iterative validation with eventual success' => sub {
-    plan tests => 1;
+subtest 'validate_qa_contact_with_lookup - select from search results (no re-validation)' => sub {
+    plan tests => 2;
 
     my $bug         = create_bug();
     my $mock_client = create_mock_client(
         [ { email => 'john@example.com', real_name => 'John Doe' } ],
-        undef    # Will be mocked dynamically below
+        0    # Initial validate returns false
     );
+
+    # Track validation calls
+    my $validate_count = 0;
+    $mock_client->mock(
+        'validate_user',
+        sub {
+            my ( $self, $email ) = @_;
+            $validate_count++;
+            return 0;    # Always return false (initial email is invalid)
+        }
+    );
+
+    # Mock STDIN for selecting user (index 0)
+    my $input = "0\n";
+    local *STDIN;
+    open STDIN, '<', \$input;
+
+    my $result = $bug->validate_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
+
+    is( $result,         'john@example.com', 'Returns selected email from search results' );
+    is( $validate_count, 1,                  'Only validates initial email, not selected result' );
+};
+
+subtest '_select_qa_contact - manually entered email requires validation' => sub {
+    plan tests => 1;
+
+    my $bug         = create_bug();
+    my $mock_client = create_mock_client( [], undef );
 
     # Mock validate_user to fail first time, succeed second time
     my $validate_count = 0;
@@ -130,21 +158,21 @@ subtest 'validate_qa_contact_with_lookup - iterative validation with eventual su
         }
     );
 
-    # Mock STDIN for selecting user (index 0), then selecting again
-    my $input = "0\n0\n";
+    # Mock STDIN: no users found, enter email, it fails, search again with new term, enter email again, succeeds
+    my $input = "y\nwrong\@example.com\ny\ncorrect\@example.com\n";
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->validate_qa_contact_with_lookup( $mock_client, 'invalid@example.com' );
+    my $result = $bug->_select_qa_contact( $mock_client, 'invalid@example.com' );
 
-    is( $result, 'john@example.com', 'Returns validated email after iteration' );
+    is( $result, 'correct@example.com', 'Returns validated manually entered email after retry' );
 };
 
 subtest '_select_qa_contact - no users found, user enters new email' => sub {
     plan tests => 1;
 
     my $bug         = create_bug();
-    my $mock_client = create_mock_client( [] );
+    my $mock_client = create_mock_client( [], 1 );    # validate_user returns true
 
     # Mock STDIN for user input
     my $input = "y\nnew\@example.com\n";
@@ -153,7 +181,7 @@ subtest '_select_qa_contact - no users found, user enters new email' => sub {
 
     my $result = $bug->_select_qa_contact( $mock_client, 'invalid@example.com' );
 
-    is( $result, 'new@example.com', 'Returns manually entered email' );
+    is( $result, 'new@example.com', 'Returns manually entered validated email' );
 };
 
 subtest '_select_qa_contact - no users found, user declines' => sub {
