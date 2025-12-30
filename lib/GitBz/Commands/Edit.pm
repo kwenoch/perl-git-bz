@@ -402,6 +402,7 @@ sub update_bug {
             $bug->{_pending_updates}{qa_contact} = $validated_email;
         }
 
+        # Display changes before spinner (apply_updates will skip display since rows are already cleared)
         $bug->_display_changes();
         my $spinner = GitBz::Progress::start_spinner("Updating bug fields");
 
