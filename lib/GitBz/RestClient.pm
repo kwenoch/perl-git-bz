@@ -146,6 +146,9 @@ sub get_bug {
         "%s/bug/%s?include_fields=id,summary,status,resolution,depends_on,cf_patch_complexity,cf_sponsors,cf_sponsorship,qa_contact",
         $self->{base_url}, $bug_id
     );
+    my $token = $self->get_token();
+    $url .= "&token=$token" if $token;
+
     my $response = $self->{ua}->get($url);
 
     if ( !$response->is_success ) {
@@ -168,6 +171,9 @@ sub get_attachments {
     my ( $self, $bug_id ) = @_;
 
     my $url      = sprintf( "%s/bug/%s/attachment", $self->{base_url}, $bug_id );
+    my $token = $self->get_token();
+    $url .= "?token=$token" if $token;
+
     my $response = $self->{ua}->get($url);
 
     if ( !$response->is_success ) {
