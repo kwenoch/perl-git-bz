@@ -93,6 +93,12 @@ sub generate_bug_fields {
     $template .= "# QA-contact: $current_user\n";
     $template .= "\n";
 
+    # Add Assignee field
+    my $assignee = $bug->assigned_to || "";
+    $template .= "# Current assignee: $assignee\n";
+    $template .= "# Assignee: $current_user\n";
+    $template .= "\n";
+
     # Add patch complexity options
     my $complexity = $bug->cf_patch_complexity || "";
     $template .= "# Current patch-complexity: $complexity\n";
@@ -208,6 +214,10 @@ sub parse_bug_fields {
             my $value = $1;
             $value =~ s/^\s+|\s+$//g;  # Trim whitespace
             $bug_updates{qa_contact} = $value;  # Empty string allowed (clears field)
+        } elsif ( $line =~ /^\s*Assignee\s*:\s*(.*)/ ) {
+            my $value = $1;
+            $value =~ s/^\s+|\s+$//g;  # Trim whitespace
+            $bug_updates{assigned_to} = $value;  # Empty string allowed (clears field)
         } elsif ( $line =~ /^\s*Patch-complexity\s*:\s*(.+)/ ) {
             $bug_updates{cf_patch_complexity} = $1;
         } elsif ( $line =~ /^\s*Sponsors\s*:\s*(.+)/ ) {

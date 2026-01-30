@@ -321,7 +321,7 @@ sub update_bug {
     for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
-        } elsif ( $line !~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/ ) {
+        } elsif ( $line !~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact|Assignee)\s*:/ ) {
             push @comment_lines, $line;
         }
     }
@@ -331,7 +331,7 @@ sub update_bug {
 
     # Early return if no changes
     return 0
-        unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/m
+        unless $edited =~ /^\s*(Status|Resolution|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact|Assignee)\s*:/m
         || $comment
         || @obsoletes;
 
@@ -355,6 +355,9 @@ sub update_bug {
     }
     if ( exists $update_params->{qa_contact} && $update_params->{qa_contact} ne ( $bug->qa_contact || '' ) ) {
         $actual_changes{qa_contact} = $update_params->{qa_contact};
+    }
+    if ( exists $update_params->{assigned_to} && $update_params->{assigned_to} ne ( $bug->assigned_to || '' ) ) {
+        $actual_changes{assigned_to} = $update_params->{assigned_to};
     }
     if ( $update_params->{resolution} && $update_params->{resolution} ne ( $bug->resolution || '' ) ) {
         $actual_changes{resolution} = $update_params->{resolution};
@@ -385,6 +388,7 @@ sub update_bug {
         # Queue field updates
         $bug->set_field( 'status',     $actual_changes{status} )     if $actual_changes{status};
         $bug->set_field( 'qa_contact', $actual_changes{qa_contact} ) if exists $actual_changes{qa_contact};
+        $bug->set_field( 'assigned_to', $actual_changes{assigned_to} ) if exists $actual_changes{assigned_to};
         $bug->set_field( 'resolution', $actual_changes{resolution} ) if $actual_changes{resolution};
         $bug->set_field( 'cf_patch_complexity', $actual_changes{cf_patch_complexity} )
             if $actual_changes{cf_patch_complexity};
@@ -400,6 +404,14 @@ sub update_bug {
 
             # Update the queued value with validated email
             $bug->{_pending_updates}{qa_contact} = $validated_email;
+        }
+
+        # Validate assignee BEFORE starting spinner or making any API calls
+        if ( exists $actual_changes{assigned_to} ) {
+            my $validated_email = $bug->validate_assignee_with_lookup( $client, $actual_changes{assigned_to} );
+
+            # Update the queued value with validated email
+            $bug->{_pending_updates}{assigned_to} = $validated_email;
         }
 
         # Display changes before spinner (apply_updates will skip display since rows are already cleared)

@@ -39,6 +39,7 @@ sub create_bug {
             cf_sponsors         => $data{cf_sponsors},
             cf_sponsorship      => $data{cf_sponsorship},
             qa_contact          => $data{qa_contact},
+            assigned_to         => $data{assigned_to},
         },
         _attachments => [],
     }, 'GitBz::Bug';
@@ -54,6 +55,7 @@ sub create_bug {
     *{'GitBz::Bug::cf_sponsors'}         = sub { $_[0]->{data}->{cf_sponsors} };
     *{'GitBz::Bug::cf_sponsorship'}      = sub { $_[0]->{data}->{cf_sponsorship} };
     *{'GitBz::Bug::qa_contact'}          = sub { $_[0]->{data}->{qa_contact} };
+    *{'GitBz::Bug::assigned_to'}         = sub { $_[0]->{data}->{assigned_to} };
 
     return $bug;
 }
@@ -327,6 +329,68 @@ subtest 'parse_bug_fields() - qa_contact empty value' => sub {
 
     my $updates = GitBz::Template::parse_bug_fields( $content, $bug );
     is( $updates->{qa_contact}, '', 'Allows empty string (clearing field)' );
+};
+
+subtest 'generate_bug_fields() - assignee field with value' => sub {
+    plan tests => 2;
+
+    my $bug = create_bug( assigned_to => 'assignee@example.com' );
+    my $client = create_client();
+
+    my $mock_workflow = Test::MockModule->new('GitBz::StatusWorkflow');
+    $mock_workflow->mock('new', sub { bless {}, 'GitBz::StatusWorkflow' });
+    $mock_workflow->mock('get_next_status_values', sub { return [] });
+
+    my $mock_progress = Test::MockModule->new('GitBz::Progress');
+    $mock_progress->mock('with_spinner', sub { return [] });
+
+    my $template = GitBz::Template::generate_bug_fields( $bug, $client );
+
+    like( $template, qr/# Current assignee: assignee\@example\.com/, 'Shows current assignee' );
+    like( $template, qr/# Assignee: test\@example\.com/,            'Shows current user as default' );
+};
+
+subtest 'generate_bug_fields() - assignee field empty' => sub {
+    plan tests => 1;
+
+    my $bug = create_bug();
+    my $client = create_client();
+
+    my $mock_workflow = Test::MockModule->new('GitBz::StatusWorkflow');
+    $mock_workflow->mock('new', sub { bless {}, 'GitBz::StatusWorkflow' });
+    $mock_workflow->mock('get_next_status_values', sub { return [] });
+
+    my $mock_progress = Test::MockModule->new('GitBz::Progress');
+    $mock_progress->mock('with_spinner', sub { return [] });
+
+    my $template = GitBz::Template::generate_bug_fields( $bug, $client );
+
+    like( $template, qr/# Current assignee:\s*\n/, 'Shows empty when not set' );
+};
+
+subtest 'parse_bug_fields() - assignee parsing' => sub {
+    plan tests => 2;
+
+    my $bug = create_bug();
+    my $content = "Assignee: newassignee\@example.com\n";
+
+    my $updates = GitBz::Template::parse_bug_fields( $content, $bug );
+    is( $updates->{assigned_to}, 'newassignee@example.com', 'Parses assignee' );
+
+    # Test with whitespace
+    my $content2 = "Assignee:   padded\@example.com   \n";
+    my $updates2 = GitBz::Template::parse_bug_fields( $content2, $bug );
+    is( $updates2->{assigned_to}, 'padded@example.com', 'Trims whitespace' );
+};
+
+subtest 'parse_bug_fields() - assignee empty value' => sub {
+    plan tests => 1;
+
+    my $bug = create_bug( assigned_to => 'old@example.com' );
+    my $content = "Assignee: \n";
+
+    my $updates = GitBz::Template::parse_bug_fields( $content, $bug );
+    is( $updates->{assigned_to}, '', 'Allows empty string (clearing field)' );
 };
 
 done_testing();

@@ -396,6 +396,7 @@ sub attach_patches {
         # Queue field updates
         $bug->set_field( 'status',              $bug_updates{status} ) if $bug_updates{status};
         $bug->set_field( 'qa_contact',          $bug_updates{qa_contact} ) if exists $bug_updates{qa_contact};
+        $bug->set_field( 'assigned_to',         $bug_updates{assigned_to} ) if exists $bug_updates{assigned_to};
         $bug->set_field( 'cf_patch_complexity', $bug_updates{cf_patch_complexity} )
             if $bug_updates{cf_patch_complexity};
         $bug->set_sponsors( %{ $bug_updates{cf_sponsors} } )              if $bug_updates{cf_sponsors};
@@ -409,6 +410,14 @@ sub attach_patches {
 
             # Update the queued value with validated email
             $bug->{_pending_updates}{qa_contact} = $validated_email;
+        }
+
+        # Validate assignee BEFORE starting spinner or making any API calls
+        if ( exists $bug_updates{assigned_to} ) {
+            my $validated_email = $bug->validate_assignee_with_lookup( $client, $bug_updates{assigned_to} );
+
+            # Update the queued value with validated email
+            $bug->{_pending_updates}{assigned_to} = $validated_email;
         }
 
         # Apply updates with spinner
@@ -660,7 +669,7 @@ sub parse_bug_updates {
     for my $line (@non_comment_lines) {
         if ( $line =~ /^\s*Obsoletes\s*:\s*(\d+)/ ) {
             push @obsoletes, $1;
-        } elsif ( $line !~ /^\s*(Status|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact)\s*:/ ) {
+        } elsif ( $line !~ /^\s*(Status|Patch-complexity|Sponsors|Sponsorship|Depends|QA-contact|Assignee)\s*:/ ) {
             # Everything else is bug-level comment
             push @bug_comment_lines, $line;
         }
