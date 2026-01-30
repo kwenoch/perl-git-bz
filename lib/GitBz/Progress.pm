@@ -311,17 +311,31 @@ sub stop_spinner {
 Print a success message with a green checkmark.
 
     GitBz::Progress::print_success("Attached: patch-name.patch");
+    GitBz::Progress::print_success("Top-level result", 0);      # No indent
+    GitBz::Progress::print_success("Sub-operation", 2);         # 4-space indent
+
+Optional second parameter sets indentation level (default: 1):
+  0 = No indent (top-level results)
+  1 = 2-space indent (default, main operations)
+  2 = 4-space indent (sub-operations)
+  3+ = 6+ space indent (nested context)
 
 =cut
 
 sub print_success {
-    my ($message) = @_;
+    my ($message, $indent) = @_;
+    $indent //= 1;  # Default to level 1 (current behavior)
+
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
+
+    # Calculate indentation and prefix length
+    my $spaces = '  ' x $indent;  # 2 spaces per level
+    my $prefix_len = (2 * $indent) + 2;  # indent + symbol + space
+
     # Truncate message to fit terminal width
-    # Prefix: "  ✓ " = 4 chars
-    my $truncated_msg = truncate_message( $message, 4, 0 );
-    print colored( ['green'], '  ✓ ' ) . "$truncated_msg\n";
+    my $truncated_msg = truncate_message( $message, $prefix_len, 0 );
+    print colored( ['green'], "${spaces}✓ " ) . "$truncated_msg\n";
 }
 
 =head2 print_error
@@ -329,17 +343,26 @@ sub print_success {
 Print an error message with a red ✘.
 
     GitBz::Progress::print_error("Failed to upload attachment");
+    GitBz::Progress::print_error("Top-level error", 0);         # No indent
+
+Optional second parameter sets indentation level (default: 1).
 
 =cut
 
 sub print_error {
-    my ($message) = @_;
+    my ($message, $indent) = @_;
+    $indent //= 1;  # Default to level 1 (current behavior)
+
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
+
+    # Calculate indentation and prefix length
+    my $spaces = '  ' x $indent;  # 2 spaces per level
+    my $prefix_len = (2 * $indent) + 2;  # indent + symbol + space
+
     # Truncate message to fit terminal width
-    # Prefix: "  ✘ " = 4 chars
-    my $truncated_msg = truncate_message( $message, 4, 0 );
-    print colored( ['red'], '  ✘ ' ) . "$truncated_msg\n";
+    my $truncated_msg = truncate_message( $message, $prefix_len, 0 );
+    print colored( ['red'], "${spaces}✘ " ) . "$truncated_msg\n";
 }
 
 =head2 print_info
@@ -347,17 +370,26 @@ sub print_error {
 Print an informational message.
 
     GitBz::Progress::print_info("Processing 5 patches...");
+    GitBz::Progress::print_info("Detailed context", 2);         # 4-space indent
+
+Optional second parameter sets indentation level (default: 1).
 
 =cut
 
 sub print_info {
-    my ($message) = @_;
+    my ($message, $indent) = @_;
+    $indent //= 1;  # Default to level 1 (current behavior)
+
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
+
+    # Calculate indentation and prefix length
+    my $spaces = '  ' x $indent;  # 2 spaces per level
+    my $prefix_len = (2 * $indent) + 2;  # indent + symbol + space
+
     # Truncate message to fit terminal width
-    # Prefix: "  ℹ " = 4 chars
-    my $truncated_msg = truncate_message( $message, 4, 0 );
-    print colored( ['blue'], '  ℹ ' ) . "$truncated_msg\n";
+    my $truncated_msg = truncate_message( $message, $prefix_len, 0 );
+    print colored( ['blue'], "${spaces}🅸 " ) . "$truncated_msg\n";
 }
 
 =head2 print_warning
@@ -365,17 +397,45 @@ sub print_info {
 Print a warning message with a yellow warning symbol.
 
     GitBz::Progress::print_warning("Bug number mismatch detected");
+    GitBz::Progress::print_warning("Nested warning", 2);        # 4-space indent
+
+Optional second parameter sets indentation level (default: 1).
 
 =cut
 
 sub print_warning {
-    my ($message) = @_;
+    my ($message, $indent) = @_;
+    $indent //= 1;  # Default to level 1 (current behavior)
+
     # Re-enable UTF-8 output (refreshes layer state for wide characters from colored())
     binmode(STDOUT, ':utf8');
+
+    # Calculate indentation and prefix length
+    my $spaces = '  ' x $indent;  # 2 spaces per level
+    my $prefix_len = (2 * $indent) + 2;  # indent + symbol + space
+
     # Truncate message to fit terminal width
-    # Prefix: "  ⚠ " = 4 chars
-    my $truncated_msg = truncate_message( $message, 4, 0 );
-    print colored( ['yellow'], '  ⚠ ' ) . "$truncated_msg\n";
+    my $truncated_msg = truncate_message( $message, $prefix_len, 0 );
+    print colored( ['yellow'], "${spaces}⚠ " ) . "$truncated_msg\n";
+}
+
+=head2 print_section
+
+Print a section header (no symbol, no indent).
+
+    GitBz::Progress::print_section("Applying patches");
+
+Optional second parameter adds leading newlines (default: 1).
+
+=cut
+
+sub print_section {
+    my ($title, $spacing) = @_;
+    $spacing //= 1;  # Default to 1 newline before section
+
+    binmode(STDOUT, ':utf8');
+    print "\n" x $spacing;
+    print "$title:\n";
 }
 
 =head2 progress_counter

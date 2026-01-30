@@ -454,7 +454,8 @@ sub update_bug {
     }
 
     if ($changed) {
-        GitBz::Progress::print_success("Successfully updated bug $bug_ref\n");
+        print "\n";  # Add spacing before top-level result
+        GitBz::Progress::print_success("Successfully updated bug $bug_ref", 0);
     }
 
     return $changed;

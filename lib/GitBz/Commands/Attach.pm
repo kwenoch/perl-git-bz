@@ -110,7 +110,8 @@ sub execute {
         $self->attach_patches( $bug_ref, \@commits, \%opts );
 
         my $patch_word = @commits == 1 ? "patch" : "patches";
-        GitBz::Progress::print_success("Successfully attached " . scalar(@commits) . " $patch_word to bug $bug_ref\n");
+        print "\n";  # Add spacing before top-level result
+        GitBz::Progress::print_success("Successfully attached " . scalar(@commits) . " $patch_word to bug $bug_ref", 0);
     } catch {
         GitBz::Exception->throw("Attach failed: $_");
     };
@@ -456,7 +457,7 @@ sub attach_patches {
 
     # Show progress header
     my $patch_word = @$commits == 1 ? "patch" : "patches";
-    print "\nUploading " . scalar(@$commits) . " $patch_word:\n";
+    GitBz::Progress::print_section("Uploading " . scalar(@$commits) . " $patch_word");
 
     my $patch_num     = 0;
     my $total_patches = scalar(@$commits);
@@ -491,8 +492,8 @@ sub attach_patches {
 
         if ($@) {
             GitBz::Progress::stop_spinner( $spinner, 'error' );
-            GitBz::Progress::print_error("Failed to attach: $description");
-            print "    Error: $@\n";
+            GitBz::Progress::print_error("Failed to attach: $description", 2);
+            GitBz::Progress::print_info("Error: $@", 3);
             return;    # Skip remaining steps
         }
 

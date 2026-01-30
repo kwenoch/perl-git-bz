@@ -197,7 +197,8 @@ sub apply_bug_with_dependencies {
     # Track as applied only if patches were actually applied
     if ($patches_applied) {
         push @bugs_applied, $bug_ref;
-        GitBz::Progress::print_success("Successfully applied $patches_applied patch(es) from bug $bug_ref");
+        print "\n";  # Add spacing before top-level result
+        GitBz::Progress::print_success("Successfully applied $patches_applied patch(es) from bug $bug_ref", 0);
     }
 
     return $patches_applied;
@@ -238,17 +239,20 @@ sub handle_git_am_state {
         # Clean up temp directory if it exists
         if ( $temp_dir && -d $temp_dir ) {
             rmtree($temp_dir);
-            GitBz::Progress::print_error("Aborted patch application and cleaned up temp files\n");
+            print "\n";  # Add spacing before top-level result
+            GitBz::Progress::print_error("Aborted patch application and cleaned up temp files", 0);
         } else {
-            GitBz::Progress::print_error("Aborted patch application\n");
+            print "\n";  # Add spacing before top-level result
+            GitBz::Progress::print_error("Aborted patch application", 0);
         }
     } elsif ( $opts->{continue} ) {
         GitBz::Git->run( 'am', '--continue' );
-        GitBz::Progress::print_info("Continued with current patch\n");
+        print "\n";  # Add spacing before top-level result
+        GitBz::Progress::print_info("Continued with current patch", 0);
 
         # Continue with remaining patches if any
         if ( $remaining_patches && @$remaining_patches ) {
-            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n");
+            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...");
             my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
             $self->apply_patches( $patch_info, $temp_dir, $opts );
         } else {
@@ -260,11 +264,12 @@ sub handle_git_am_state {
         }
     } elsif ( $opts->{skip} ) {
         GitBz::Git->run( 'am', '--skip' );
-        GitBz::Progress::print_warning("Skipped current patch\n");
+        print "\n";  # Add spacing before top-level result
+        GitBz::Progress::print_warning("Skipped current patch", 0);
 
         # Continue with remaining patches if any
         if ( $remaining_patches && @$remaining_patches ) {
-            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...\n");
+            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...");
             my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
             $self->apply_patches( $patch_info, $temp_dir, $opts );
         } else {
@@ -619,7 +624,9 @@ sub apply_patches {
     chomp $git_dir;
 
     # Level 0 (quiet): skip header, Level 1+: show header
-    print "\nApplying " . scalar(@$patch_info) . " patch(es):\n" if GitBz::Progress::get_verbosity() >= 1;
+    if ( GitBz::Progress::get_verbosity() >= 1 ) {
+        GitBz::Progress::print_section("Applying " . scalar(@$patch_info) . " patch(es)");
+    }
 
     my $failed = 0;
     for my $i ( 0 .. $#$patch_info ) {
@@ -636,7 +643,7 @@ sub apply_patches {
             # Show progress after successful application (print each line, don't overwrite)
             my $counter = sprintf( "[%d/%d]", $i + 1, scalar(@$patch_info) );
             my $summary = $info->{summary} || "patch $info->{id}";
-            GitBz::Progress::print_success("$counter Applied $summary") if GitBz::Progress::get_verbosity() >= 1;
+            GitBz::Progress::print_success("$counter Applied $summary", 2) if GitBz::Progress::get_verbosity() >= 1;
         } catch {
             $failed = 1;
 
