@@ -48,8 +48,9 @@ sub create_bug {
     $bug->set_always( 'assigned_to', $data{assigned_to} );
 
     # Add the actual methods we're testing
-    $bug->mock( 'validate_assignee_with_lookup', \&GitBz::Bug::validate_assignee_with_lookup );
-    $bug->mock( '_select_assignee',              \&GitBz::Bug::_select_assignee );
+    $bug->mock( 'validate_assignee_with_lookup',    \&GitBz::Bug::validate_assignee_with_lookup );
+    $bug->mock( 'validate_user_field_with_lookup',  \&GitBz::Bug::validate_user_field_with_lookup );
+    $bug->mock( '_select_user',                     \&GitBz::Bug::_select_user );
 
     return $bug;
 }
@@ -141,7 +142,7 @@ subtest 'validate_assignee_with_lookup - select from search results (no re-valid
     is( $validate_count, 1,                  'Only validates initial email, not selected result' );
 };
 
-subtest '_select_assignee - manually entered email requires validation' => sub {
+subtest '_select_user (assignee) - manually entered email requires validation' => sub {
     plan tests => 1;
 
     my $bug         = create_bug();
@@ -163,12 +164,12 @@ subtest '_select_assignee - manually entered email requires validation' => sub {
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->_select_assignee( $mock_client, 'invalid@example.com' );
+    my $result = $bug->_select_user( $mock_client, 'invalid@example.com', 'Assignee' );
 
     is( $result, 'correct@example.com', 'Returns validated manually entered email after retry' );
 };
 
-subtest '_select_assignee - no users found, user enters new email' => sub {
+subtest '_select_user (assignee) - no users found, user enters new email' => sub {
     plan tests => 1;
 
     my $bug         = create_bug();
@@ -179,12 +180,12 @@ subtest '_select_assignee - no users found, user enters new email' => sub {
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->_select_assignee( $mock_client, 'invalid@example.com' );
+    my $result = $bug->_select_user( $mock_client, 'invalid@example.com', 'Assignee' );
 
     is( $result, 'new@example.com', 'Returns manually entered validated email' );
 };
 
-subtest '_select_assignee - no users found, user declines' => sub {
+subtest '_select_user (assignee) - no users found, user declines' => sub {
     plan tests => 1;
 
     my $bug         = create_bug();
@@ -195,12 +196,12 @@ subtest '_select_assignee - no users found, user declines' => sub {
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->_select_assignee( $mock_client, 'invalid@example.com' );
+    my $result = $bug->_select_user( $mock_client, 'invalid@example.com', 'Assignee' );
 
     is( $result, undef, 'Returns undef when user declines' );
 };
 
-subtest '_select_assignee - users found, valid selection' => sub {
+subtest '_select_user (assignee) - users found, valid selection' => sub {
     plan tests => 1;
 
     my $bug         = create_bug();
@@ -216,12 +217,12 @@ subtest '_select_assignee - users found, valid selection' => sub {
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->_select_assignee( $mock_client, 'invalid@example.com' );
+    my $result = $bug->_select_user( $mock_client, 'invalid@example.com', 'Assignee' );
 
     is( $result, 'jane@example.com', 'Returns selected user email' );
 };
 
-subtest '_select_assignee - users found, invalid selection' => sub {
+subtest '_select_user (assignee) - users found, invalid selection' => sub {
     plan tests => 1;
 
     my $bug         = create_bug();
@@ -232,7 +233,7 @@ subtest '_select_assignee - users found, invalid selection' => sub {
     local *STDIN;
     open STDIN, '<', \$input;
 
-    my $result = $bug->_select_assignee( $mock_client, 'invalid@example.com' );
+    my $result = $bug->_select_user( $mock_client, 'invalid@example.com', 'Assignee' );
 
     is( $result, undef, 'Returns undef for invalid selection' );
 };

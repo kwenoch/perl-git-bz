@@ -284,17 +284,17 @@ sub update {
     return $self->{client}->update_bug( $self->id, %params );
 }
 
-=head2 validate_qa_contact_with_lookup
+=head2 validate_user_field_with_lookup
 
-    my $validated_email = $bug->validate_qa_contact_with_lookup($client, $email);
+    my $validated_email = $bug->validate_user_field_with_lookup($client, $email, $field_label);
 
-Validates QA contact email with automatic lookup and user interaction.
+Generic method to validate user field email with automatic lookup and user interaction.
 Returns validated email on success, dies on error/cancellation.
 
 =cut
 
-sub validate_qa_contact_with_lookup {
-    my ( $self, $client, $email ) = @_;
+sub validate_user_field_with_lookup {
+    my ( $self, $client, $email, $field_label ) = @_;
 
     # Skip validation if setting to our own login (we know we exist)
     return $email if $email eq $client->{username};
@@ -307,27 +307,27 @@ sub validate_qa_contact_with_lookup {
 
     # If not valid, enter search/select flow (handles validation internally)
     print "\n";
-    GitBz::Progress::print_error("QA contact '$email' not found");
+    GitBz::Progress::print_error("$field_label '$email' not found");
 
-    my $selected_email = $self->_select_qa_contact( $client, $email );
+    my $selected_email = $self->_select_user( $client, $email, $field_label );
 
     die "Update cancelled by user\n" unless $selected_email;
 
     return $selected_email;
 }
 
-=head2 _select_qa_contact
+=head2 _select_user
 
-    my $email = $bug->_select_qa_contact($client, $invalid_email);
+    my $email = $bug->_select_user($client, $invalid_email, $field_label);
 
-Internal method to search for users and present selection menu.
+Generic internal method to search for users and present selection menu.
 Validates manually entered emails and loops until valid or cancelled.
 Returns validated email or undef if cancelled.
 
 =cut
 
-sub _select_qa_contact {
-    my ( $self, $client, $invalid_email ) = @_;
+sub _select_user {
+    my ( $self, $client, $invalid_email, $field_label ) = @_;
 
     my $search_email = $invalid_email;
 
@@ -352,19 +352,19 @@ sub _select_qa_contact {
 
         if ( !@$users ) {
             print "No similar users found.\n";
-            print "Would you like to enter a different QA contact? [y/N]: ";
+            print "Would you like to enter a different $field_label? [y/N]: ";
             my $response = <STDIN>;
             chomp $response;
 
             if ( $response =~ /^[yY]/ ) {
-                print "Enter QA contact email: ";
+                print "Enter $field_label email: ";
                 my $new_email = <STDIN>;
                 chomp $new_email;
                 $new_email =~ s/^\s+|\s+$//g;
 
                 if ($new_email) {
                     # Validate the manually entered email
-                    print "\nValidating QA contact: $new_email\n";
+                    print "\nValidating $field_label: $new_email\n";
                     my $is_valid = $client->validate_user($new_email);
 
                     if ($is_valid) {
@@ -372,7 +372,7 @@ sub _select_qa_contact {
                     } else {
                         # Invalid - loop back with this email as search term
                         print "\n";
-                        GitBz::Progress::print_error("QA contact '$new_email' not found");
+                        GitBz::Progress::print_error("$field_label '$new_email' not found");
                         $search_email = $new_email;
                         next;
                     }
@@ -403,6 +403,20 @@ sub _select_qa_contact {
         # User cancelled
         return;
     }
+}
+
+=head2 validate_qa_contact_with_lookup
+
+    my $validated_email = $bug->validate_qa_contact_with_lookup($client, $email);
+
+Validates QA contact email with automatic lookup and user interaction.
+Returns validated email on success, dies on error/cancellation.
+
+=cut
+
+sub validate_qa_contact_with_lookup {
+    my ( $self, $client, $email ) = @_;
+    return $self->validate_user_field_with_lookup( $client, $email, 'QA contact' );
 }
 
 =head2 validate_assignee_with_lookup
@@ -416,114 +430,7 @@ Returns validated email on success, dies on error/cancellation.
 
 sub validate_assignee_with_lookup {
     my ( $self, $client, $email ) = @_;
-
-    # Skip validation if setting to our own login (we know we exist)
-    return $email if $email eq $client->{username};
-
-    # Validate email exists before attempting update
-    my $is_valid = $client->validate_user($email);
-
-    # If valid, return it
-    return $email if $is_valid;
-
-    # If not valid, enter search/select flow (handles validation internally)
-    print "\n";
-    GitBz::Progress::print_error("Assignee '$email' not found");
-
-    my $selected_email = $self->_select_assignee( $client, $email );
-
-    die "Update cancelled by user\n" unless $selected_email;
-
-    return $selected_email;
-}
-
-=head2 _select_assignee
-
-    my $email = $bug->_select_assignee($client, $invalid_email);
-
-Internal method to search for users and present selection menu.
-Validates manually entered emails and loops until valid or cancelled.
-Returns validated email or undef if cancelled.
-
-=cut
-
-sub _select_assignee {
-    my ( $self, $client, $invalid_email ) = @_;
-
-    my $search_email = $invalid_email;
-
-    while (1) {
-        # Extract the local part (before @) from the email
-        my $search_term;
-        if ( $search_email =~ /^([^@]+)@/ ) {
-            $search_term = $1;
-        } else {
-            $search_term = $search_email;
-        }
-
-        # Search for users whose email begins with the local part
-        print "\nSearching for similar users (begins with '$search_term')...\n";
-        my $users = GitBz::Progress::with_spinner(
-            "Searching users",
-            sub {
-                return $client->search_users($search_term);
-            },
-            1
-        );
-
-        if ( !@$users ) {
-            print "No similar users found.\n";
-            print "Would you like to enter a different assignee? [y/N]: ";
-            my $response = <STDIN>;
-            chomp $response;
-
-            if ( $response =~ /^[yY]/ ) {
-                print "Enter assignee email: ";
-                my $new_email = <STDIN>;
-                chomp $new_email;
-                $new_email =~ s/^\s+|\s+$//g;
-
-                if ($new_email) {
-                    # Validate the manually entered email
-                    print "\nValidating assignee: $new_email\n";
-                    my $is_valid = $client->validate_user($new_email);
-
-                    if ($is_valid) {
-                        return $new_email;
-                    } else {
-                        # Invalid - loop back with this email as search term
-                        print "\n";
-                        GitBz::Progress::print_error("Assignee '$new_email' not found");
-                        $search_email = $new_email;
-                        next;
-                    }
-                }
-            }
-
-            return;
-        }
-
-        # Present users for selection
-        print "\nFound " . scalar(@$users) . " similar user(s):\n\n";
-
-        for my $i ( 0 .. $#$users ) {
-            my $user         = $users->[$i];
-            my $display_name = $user->{real_name} ? "$user->{real_name} <$user->{email}>" : $user->{email};
-            print "  [$i] $display_name\n";
-        }
-
-        print "\nSelect a user by number, or press Enter to cancel: ";
-        my $selection = <STDIN>;
-        chomp $selection;
-
-        if ( $selection =~ /^\d+$/ && $selection >= 0 && $selection <= $#$users ) {
-            # User selected from search results - already valid, return immediately
-            return $users->[$selection]{email};
-        }
-
-        # User cancelled
-        return;
-    }
+    return $self->validate_user_field_with_lookup( $client, $email, 'Assignee' );
 }
 
 =head2 add_attachment
