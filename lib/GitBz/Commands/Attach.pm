@@ -507,6 +507,7 @@ sub attach_patches {
 
 Finds patches that should be automatically obsoleted based on matching commit subjects.
 Auto-obsoletes exact matches, prompts for confirmation on non-matching patches unless --yes is used.
+Options at the prompt: (o)bsolete, (s)kip, skip (a)ll remaining, (c)ancel.
 
 =cut
 
@@ -538,10 +539,13 @@ sub find_trivial_obsoletes {
     # Handle manual obsoletes with confirmation (unless --yes flag is used)
     my @confirmed_obsoletes;
     if ( @manual_obsoletes && !$auto_yes ) {
+        my $skip_all = 0;
         for my $patch (@manual_obsoletes) {
+            next if $skip_all;
+
             print "Patch attachment found: $patch->{id} - $patch->{summary}\n";
             print "This doesn't match any new commit. What would you like to do?\n";
-            print "(o)bsolete, (s)kip, (c)ancel: ";
+            print "(o)bsolete, (s)kip, skip (a)ll remaining, (c)ancel: ";
 
             my $choice = <STDIN>;
             chomp $choice;
@@ -549,6 +553,8 @@ sub find_trivial_obsoletes {
 
             if ( $choice eq 'o' || $choice eq 'obsolete' ) {
                 push @confirmed_obsoletes, $patch->{id};
+            } elsif ( $choice eq 'a' || $choice eq 'all' ) {
+                $skip_all = 1;
             } elsif ( $choice eq 'c' || $choice eq 'cancel' ) {
                 GitBz::Exception->throw("Operation cancelled by user\n");
             }
