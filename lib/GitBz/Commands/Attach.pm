@@ -625,6 +625,11 @@ sub edit_bug_updates {
     $template .= "# To obsolete existing patches, uncomment the appropriate lines.\n";
 
     my $edited = $self->edit_template($template);
+
+    # If user cleared the file (empty or only whitespace), treat as cancel
+    GitBz::Exception->throw("Attachment cancelled by user\n")
+        unless $edited =~ /\S/;
+
     return $self->parse_bug_updates( $edited, $bug );
 }
 

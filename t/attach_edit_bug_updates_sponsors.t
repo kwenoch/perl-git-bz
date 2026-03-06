@@ -17,6 +17,7 @@
 
 use Modern::Perl;
 use Test::More;
+use Test::Exception;
 use Test::MockModule;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
@@ -24,7 +25,7 @@ use lib "$RealBin/../lib";
 use GitBz::Commands::Attach;
 use GitBz::Bug;
 
-plan tests => 6;
+plan tests => 7;
 
 # Mock bug helper
 sub create_mock_bug {
@@ -192,6 +193,32 @@ subtest 'Sponsor names with whitespace are trimmed' => sub {
 
     like($template, qr/Sponsors: New Sponsor.*Sponsors: Old Sponsor.*Sponsors: Whitespace Sponsor/s,
          'Trims whitespace and sorts sponsors on separate lines');
+};
+
+subtest 'Clearing the edit file cancels the operation' => sub {
+    plan tests => 1;
+
+    my $mock_git = Test::MockModule->new('GitBz::Git');
+    $mock_git->mock('get_sponsors', sub { return (); });
+
+    # Override edit_template to simulate user clearing the file
+    $mock_attach->mock('edit_template', sub { return ''; });
+
+    my $bug = create_mock_bug();
+    my @commits = ({ id => 'abc123', subject => 'Test commit' });
+
+    throws_ok(
+        sub { $attach->edit_bug_updates($bug, \@commits) },
+        qr/cancelled by user/i,
+        'Throws cancellation error when file is cleared'
+    );
+
+    # Restore the original mock
+    $mock_attach->mock('edit_template', sub {
+        my ($self, $template) = @_;
+        $captured_template = $template;
+        return $template;
+    });
 };
 
 done_testing();
