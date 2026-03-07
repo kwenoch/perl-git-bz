@@ -45,6 +45,7 @@ use LWP::UserAgent;
 use JSON;
 use MIME::Base64;
 use Encode qw(encode decode);
+use GitBz::Cache;
 use GitBz::Exception;
 
 =head2 new
@@ -416,6 +417,132 @@ sub _create_attachment_payload {
 
     $payload->{comment} = decode( 'UTF-8', $opts{comment} ) if $opts{comment};
     return $payload;
+}
+
+=head2 search_bugs
+
+    my $bugs = $client->search_bugs($summary_text);
+
+Searches for bugs with similar summaries. Returns arrayref of hashrefs with
+C<id>, C<summary>, and C<status> keys.
+
+=cut
+
+sub search_bugs {
+    my ( $self, $summary_text ) = @_;
+
+    ( my $encoded = $summary_text ) =~ s/([^A-Za-z0-9\-_.~])/sprintf("%%%02X", ord($1))/eg;
+
+    my $url   = sprintf( "%s/bug?summary=%s&limit=5", $self->{base_url}, $encoded );
+    my $token = $self->get_token();
+    $url .= "&token=$token" if $token;
+
+    my $response = $self->{ua}->get($url);
+
+    if ( !$response->is_success ) {
+        GitBz::Exception::Bugzilla->throw( "Failed to search bugs: " . $response->status_line );
+    }
+
+    my $data = decode_json( $response->content );
+    return [
+        map { { id => $_->{id}, summary => $_->{summary}, status => $_->{status} } }
+            @{ $data->{bugs} || [] }
+    ];
+}
+
+=head2 get_products
+
+    my $products = $client->get_products();
+    my $products = $client->get_products(force_refresh => 1);
+
+Returns an arrayref of products accessible to the current user. Each product
+hashref contains C<name>, C<components> (arrayref of names), and C<versions>
+(arrayref of names).
+
+Results are cached in C<~/.cache/git-bz/> for one week. Pass
+C<force_refresh =E<gt> 1> to bypass the cache and update it.
+
+=cut
+
+sub get_products {
+    my ( $self, %opts ) = @_;
+
+    my $cache_key = 'products_' . ( $self->{host} || 'default' );
+
+    unless ( $opts{force_refresh} ) {
+        my $cached = GitBz::Cache->get($cache_key);
+        return $cached if $cached;
+    }
+
+    my $url   = sprintf( "%s/product?type=accessible", $self->{base_url} );
+    my $token = $self->get_token();
+    $url .= "&token=$token" if $token;
+
+    my $response = $self->{ua}->get($url);
+
+    if ( !$response->is_success ) {
+        GitBz::Exception::Bugzilla->throw( "Failed to get products: " . $response->status_line );
+    }
+
+    my $data     = decode_json( $response->content );
+    my $products = $data->{products} || [];
+
+    my @result;
+    for my $product (@$products) {
+        my $product_url = sprintf( "%s/product/%s", $self->{base_url}, $product->{id} );
+        $product_url .= "?token=$token" if $token;
+
+        my $product_response = $self->{ua}->get($product_url);
+        next unless $product_response->is_success;
+
+        my $product_data = decode_json( $product_response->content );
+        my $p            = $product_data->{products}[0] || next;
+
+        push @result, {
+            name       => $p->{name},
+            components => [ map { $_->{name} } @{ $p->{components} || [] } ],
+            versions   => [ map { $_->{name} } @{ $p->{versions}   || [] } ],
+        };
+    }
+
+    GitBz::Cache->set( $cache_key, \@result );
+    return \@result;
+}
+
+=head2 create_bug
+
+    my $result = $client->create_bug(%params);
+
+Creates a new bug in Bugzilla. Required params: C<product>, C<component>,
+C<summary>, C<version>, C<description>. Returns hashref with C<id> key.
+Throws C<GitBz::Exception::Bugzilla> on failure.
+
+=cut
+
+sub create_bug {
+    my ( $self, %params ) = @_;
+
+    my $url = sprintf( "%s/bug", $self->{base_url} );
+
+    my $payload = {%params};
+    my $token   = $self->get_token();
+    $payload->{token} = $token if $token;
+
+    my $response = $self->{ua}->post(
+        $url,
+        Content_Type => 'application/json',
+        Content      => encode_json($payload)
+    );
+
+    if ( !$response->is_success ) {
+        my $error_data = eval { decode_json( $response->content ) };
+        if ( $error_data && $error_data->{message} ) {
+            GitBz::Exception::Bugzilla->throw( $error_data->{message} );
+        }
+        GitBz::Exception::Bugzilla->throw( "Failed to create bug: " . $response->status_line );
+    }
+
+    return decode_json( $response->content );
 }
 
 =head2 get_bug_url

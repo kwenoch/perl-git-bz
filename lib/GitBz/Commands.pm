@@ -44,7 +44,9 @@ use GitBz::RestClient;
 my %COMMANDS = (
     apply  => 'GitBz::Commands::Apply',
     attach => 'GitBz::Commands::Attach',
+    create => 'GitBz::Commands::Create',
     edit   => 'GitBz::Commands::Edit',
+    info   => 'GitBz::Commands::Info',
     open   => 'GitBz::Commands::Open',
 );
 
@@ -217,7 +219,7 @@ sub dispatch {
     my $command = shift @args || '';
 
     if ( !$command || !$COMMANDS{$command} ) {
-        print STDERR "Usage: git bz [apply|attach|edit|open] [options]\n";
+        print STDERR "Usage: git bz [apply|attach|create|edit|info|open] [options]\n";
         exit 1;
     }
 
