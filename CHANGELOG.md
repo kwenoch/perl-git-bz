@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
+### Added
+
+- [#41] Support for assignee field in `attach -e` and `edit` commands
+  - View and edit the assignee field in interactive editor
+  - Template defaults to current user's email for easy self-assignment
+  - Support for clearing the field with empty value
+  - Field appears after QA Contact in the editor template
+  - Interactive user search/selection with email validation
+- [#44] Add 'skip all remaining' option when prompting to obsolete patches
+  - Press 'a' to skip all remaining obsolete prompts at once
+
 ### Fixed
 
 - [#33] Fix visual glitches from long progress messages
@@ -13,7 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Truncate long messages with ellipsis (…) to prevent line wrapping
   - Prevent visual artifacts where carriage returns couldn't clear previous spinner frames
   - Comprehensive unit tests covering terminal width detection and message truncation
-## [1.0.3] - 2025-12-24
+- [#36] Improve QA contact validation UX
+  - Validate QA contact emails proactively before API submission
+  - Interactive user search/selection with clear error messaging
+- [#39] Progress output improvements
+  - Add indentation level support to Progress print methods
+  - Replace ✔ with ✓ for console output consistency
+  - Use Progress functions more consistently throughout codebase
+- [#40] Pass authentication token when fetching bug info and attachments
+
+## [1.0.3] - 2025-12-24
 
 ### Added
 
@@ -24,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for clearing the field with empty value
   - Field appears after Status in the editor template
 
-### Fixed
+### Fixed
 
 - [#35] Write dowloaded attachments in raw mode to avoid encoding corruption
 
@@ -116,4 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Progress**: Non-blocking spinners with line-replacement output
 - **Validation**: Status workflow validation from Bugzilla API
 
-[1.0.0]: https://gitlab.com/koha-community/git-bz/-/tags/v1.0.0
+[Unreleased]: https://gitlab.com/koha-community/perl-git-bz/-/compare/v1.0.3...main
+[1.0.3]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.3
+[1.0.2]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.2
+[1.0.1]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.1
+[1.0.0]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.0

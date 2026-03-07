@@ -10,7 +10,7 @@ A command-line tool for integrating Git workflows with Bugzilla bug tracking. De
 
 - **Apply patches from bugs** - Download and apply patches with automatic dependency resolution
 - **Attach commits as patches** - Upload Git commits as Bugzilla attachments
-- **Edit bug metadata** - Update bug status, complexity, sponsors, and dependencies
+- **Edit bug metadata** - Update bug status, assignee, QA contact, complexity, sponsors, and dependencies
 - **Dependency cascading** - Automatically follow and apply dependent bugs
 - **Smart obsoletes** - Auto-detect patches to obsolete based on commit subjects
 - **UTF-8 support** - Proper handling of international characters
@@ -125,9 +125,9 @@ git bz attach [options] [<bug-id>] <commit-range>
 
 **Edit Mode (-e):**
 - Opens interactive template for bug-level updates
-- Update status, patch complexity, sponsors, sponsorship, dependencies
+- Update status, QA contact, assignee, patch complexity, sponsors, sponsorship, dependencies
 - Add optional bug-level comment (separate from attachment comments)
-- Select patches to obsolete
+- Select patches to obsolete (press 'a' to skip all remaining prompts)
 - All updates applied in single API call
 
 **Examples:**
@@ -157,6 +157,8 @@ git bz edit <revision-range>
 
 **Editable Fields:**
 - Status (with workflow validation)
+- QA Contact (with email validation and user search)
+- Assignee (with email validation and user search)
 - Resolution
 - Patch complexity
 - Sponsors (one per line, add/remove tracking)
