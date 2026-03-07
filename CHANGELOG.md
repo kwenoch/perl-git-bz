@@ -16,6 +16,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive user search/selection with email validation
 - [#44] Add 'skip all remaining' option when prompting to obsolete patches
   - Press 'a' to skip all remaining obsolete prompts at once
+- [#45] Add `git bz create` command for filing new bug reports from the command line
+  - Required fields: `--product`, `--comp`, `--version`, `--summary`, `--desc`
+  - Optional fields: `--severity`, `--depends` (comma-separated IDs), `--blocks` (comma-separated IDs)
+  - Interactive mode prompts for each missing field in order: Product → Component →
+    Version → Severity → Summary → Description → Depends on → Blocks
+  - Fields with known accepted values (product, component, version, severity) show a
+    numbered pick-list; freehand text entry always accepted as a fallback
+  - Description opens `$GIT_EDITOR` / `$EDITOR` / `vi` for multiline input; comment
+    lines (starting with `#`) are stripped on save
+  - `--dry-run`: searches for potential duplicate bugs and reports missing required
+    fields without creating anything; supports `--json` for machine-readable output
+  - `--non-interactive`: fail-fast mode for scripts and AI agents; throws on any
+    missing required field, never prompts
+  - `--json`: all output (including errors) emitted as structured JSON to STDOUT
+  - `--yes`: skips the confirmation summary prompt
+- [#45] Add `git bz info` command for discovering valid Bugzilla field values
+  - `--fields`: outputs a JSON map of accessible products with their components and
+    versions, for use by AI agents and scripts populating `git bz create` flags
+  - `--refresh`: forces a fresh fetch from the Bugzilla API, bypassing the local cache
+- [#45] Add local field-value cache (`GitBz::Cache`)
+  - Product/component/version data is cached in `~/.cache/git-bz/` for one week
+  - Respects `$XDG_CACHE_HOME`; write failures are silently ignored (cache is
+    best-effort)
+  - Interactive `git bz create` also benefits from the cache when prompting for
+    product, component, and version
 
 ### Fixed
 

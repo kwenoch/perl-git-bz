@@ -8,11 +8,14 @@ A command-line tool for integrating Git workflows with Bugzilla bug tracking. De
 
 ## Features
 
+- **File new bug reports** - Create Bugzilla bugs from the command line, interactively or non-interactively
+- **Discover valid field values** - List available products, components, and versions as JSON
 - **Apply patches from bugs** - Download and apply patches with automatic dependency resolution
 - **Attach commits as patches** - Upload Git commits as Bugzilla attachments
 - **Edit bug metadata** - Update bug status, assignee, QA contact, complexity, sponsors, and dependencies
 - **Dependency cascading** - Automatically follow and apply dependent bugs
 - **Smart obsoletes** - Auto-detect patches to obsolete based on commit subjects
+- **Local field cache** - Product/component/version data cached for one week for fast interactive use
 - **UTF-8 support** - Proper handling of international characters
 - **Secure credentials** - Integration with Git credential helpers
 - **REST API** - Uses Bugzilla's modern REST API
@@ -61,6 +64,136 @@ git config bz.verbose 1
 ```
 
 ## Commands
+
+### create - File a new bug report
+
+Creates a new Bugzilla bug report from the command line.
+
+```bash
+git bz create [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--product` | Product name (required) |
+| `--comp` | Component name (required) |
+| `--version` | Version (required) |
+| `--severity` | Severity: `blocker`, `critical`, `major`, `normal`, `minor`, `trivial`, `enhancement` (optional) |
+| `--summary` | Bug title (required) |
+| `--desc` | Bug description (required) |
+| `--depends` | Comma-separated bug IDs this bug depends on (optional) |
+| `--blocks` | Comma-separated bug IDs this bug blocks (optional) |
+| `--dry-run` | Check for duplicates and validate fields without creating the bug |
+| `--non-interactive` | Fail-fast: never prompt, exit non-zero on any missing required field |
+| `--json` | Emit all output as JSON to STDOUT (including errors) |
+| `-y, --yes` | Skip confirmation prompt |
+
+**Interactive mode** (default when fields are missing):
+
+Prompts for each missing field in order, with pick-lists for fields that have
+known accepted values:
+
+```
+Select product:
+   1) Koha
+   2) Koha Plugin
+Choice (number or name): 1
+
+Select component:
+   1) OPAC
+   2) Staff interface
+   3) Acquisitions
+Choice (number or name): 2
+
+Select version:
+   1) master
+   2) 23.11
+Choice (number or name): 1
+
+Select severity:
+   1) blocker
+   2) critical
+   3) major
+   4) normal
+   ...
+Choice (number or name, Enter to skip): 4
+
+Enter summary: Login page crashes on empty username
+
+# $EDITOR opens for multiline description
+```
+
+**Dry-run mode:**
+
+```bash
+git bz create --summary "Login page crashes" --product Koha --comp OPAC \
+              --version master --dry-run
+```
+```
+Potential duplicates:
+  Bug 12345 - Login form broken on empty input [NEW]
+  Bug 11900 - OPAC login error with blank fields [RESOLVED]
+
+Missing fields: desc
+```
+
+**Non-interactive / scripting mode:**
+
+```bash
+git bz create \
+  --product Koha --comp OPAC --version master \
+  --severity major \
+  --summary "Login page crashes on empty username" \
+  --desc "Steps to reproduce: ..." \
+  --depends "12345,12346" \
+  --non-interactive --json
+```
+```json
+{"status":"ok","id":99999,"url":"https://bugs.koha-community.org/bugzilla3/show_bug.cgi?id=99999"}
+```
+
+**JSON error output:**
+
+```json
+{"status":"error","code":0,"message":"Component 'Unknown' is not valid for Product 'Koha'."}
+```
+
+### info - Discover valid field values
+
+Outputs available products, components, and versions as JSON so that scripts
+and AI agents can populate `git bz create` flags without guessing invalid values.
+
+```bash
+git bz info --fields
+git bz info --fields --refresh
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--fields` | List valid products, components, and versions as JSON |
+| `--refresh` | Bypass the local cache and fetch fresh data from Bugzilla |
+
+Results are **cached locally for one week** in `~/.cache/git-bz/` (respects
+`$XDG_CACHE_HOME`), so repeated calls are fast. Use `--refresh` after a Bugzilla
+admin adds a new product or component.
+
+**Example output:**
+
+```json
+{
+  "products": [
+    {
+      "name": "Koha",
+      "components": ["Architecture, internals", "Acquisitions", "OPAC", "Staff interface"],
+      "versions": ["master", "23.11", "23.05", "22.11"]
+    }
+  ]
+}
+```
 
 ### apply - Apply patches from bugs
 
@@ -203,6 +336,31 @@ git bz open 12345
 As such, is won't work within the **KTD** shell.
 
 ## Workflow Examples
+
+### Filing a new bug report
+
+```bash
+# Interactive — prompts for everything with pick-lists
+git bz create
+
+# Pre-fill known fields, be prompted only for what's missing
+git bz create --product Koha --comp OPAC --version master
+
+# Check for duplicates before filing
+git bz create --summary "Login crashes on empty input" \
+              --product Koha --comp OPAC --version master --dry-run
+
+# Fully scripted (AI agent / CI use)
+git bz create \
+  --product Koha --comp OPAC --version master \
+  --severity major \
+  --summary "Login crashes on empty input" \
+  --desc "Steps to reproduce: navigate to /cgi-bin/koha/opac-user.pl ..." \
+  --non-interactive --json
+
+# Discover valid products/components/versions first
+git bz info --fields
+```
 
 ### Applying patches from a bug
 
