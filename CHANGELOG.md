@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- [#42] Cancel attach when edit file is cleared
+  - Clearing the editor file during `git bz attach -e` now aborts the operation cleanly
+  - Matches the behaviour of the original git-bz tool
 - [#33] Fix visual glitches from long progress messages
   - Add terminal width detection with caching for proper message display
   - Truncate long messages with ellipsis (…) to prevent line wrapping

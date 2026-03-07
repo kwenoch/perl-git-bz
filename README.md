@@ -129,6 +129,7 @@ git bz attach [options] [<bug-id>] <commit-range>
 - Add optional bug-level comment (separate from attachment comments)
 - Select patches to obsolete (press 'a' to skip all remaining prompts)
 - All updates applied in single API call
+- Clearing the file and saving aborts the operation with no changes
 
 **Examples:**
 ```bash
