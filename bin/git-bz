@@ -23,7 +23,9 @@ git-bz - Git integration with Bugzilla for Koha development
 
     git bz apply [options] <bug-ref>
     git bz attach [options] [<bug-ref>] <commit-range>
+    git bz create [options]
     git bz edit [options] (<bug-ref> | <commit> | <revision-range>)
+    git bz info --fields [--refresh]
     git bz open <bug-ref>
 
 =head1 DESCRIPTION
@@ -43,9 +45,23 @@ Apply patches from a Bugzilla bug to the current Git branch.
 
 Attach Git commits as patches to a Bugzilla bug.
 
+=item B<create>
+
+Submit a new bug report to Bugzilla. Prompts interactively for required fields
+(product, component, version, severity, summary, description) unless they are
+supplied via options. Supports C<--dry-run> to check for duplicates without
+creating the bug, C<--non-interactive> for scripted use, and C<--json> to emit
+machine-readable output.
+
 =item B<edit>
 
 Edit bug details and add comments through an interactive editor.
+
+=item B<info>
+
+Discover valid Bugzilla field values. Use C<--fields> to list available
+products, components, and versions as JSON. Results are cached locally for one
+week; pass C<--refresh> to force an immediate update from Bugzilla.
 
 =item B<open>
 
