@@ -441,17 +441,18 @@ sub attach_patches {
             }
         }
 
-        # Perform obsoletes with real-time feedback
+        # Perform obsoletes in a single batch API call
         if (@obsoletes_list) {
             my $attachments   = $bug->attachments;
             my %attach_lookup = map { $_->{id} => $_->{summary} } @$attachments;
 
-            for my $attach_id (@obsoletes_list) {
-                my $summary = $attach_lookup{$attach_id} || "Unknown";
-                my $spinner = GitBz::Progress::start_spinner("Obsoleting attachment $attach_id");
-                $bug->obsolete_attachment($attach_id);
-                GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
-            }
+            my $label = @obsoletes_list == 1
+                ? "Obsoleting attachment $obsoletes_list[0]"
+                : "Obsoleting " . scalar(@obsoletes_list) . " attachments";
+            my $spinner = GitBz::Progress::start_spinner($label);
+            $bug->obsolete_attachments(@obsoletes_list);
+            my $summary = join( ", ", map { $attach_lookup{$_} || $_ } @obsoletes_list );
+            GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
         }
     }
 

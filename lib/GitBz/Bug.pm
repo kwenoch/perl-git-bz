@@ -457,8 +457,20 @@ Marks an attachment as obsolete.
 
 sub obsolete_attachment {
     my ( $self, $attachment_id ) = @_;
+    return $self->{client}->obsolete_attachments($attachment_id);
+}
 
-    return $self->{client}->obsolete_attachment($attachment_id);
+=head2 obsolete_attachments
+
+    $bug->obsolete_attachments(@attachment_ids);
+
+Marks multiple attachments as obsolete in a single API request.
+
+=cut
+
+sub obsolete_attachments {
+    my ( $self, @attachment_ids ) = @_;
+    return $self->{client}->obsolete_attachments(@attachment_ids);
 }
 
 1;

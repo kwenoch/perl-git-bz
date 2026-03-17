@@ -364,17 +364,34 @@ sub search_users {
 
     $client->obsolete_attachment($attachment_id);
 
-Marks an attachment as obsolete.
+Marks a single attachment as obsolete. For obsoleting multiple attachments
+efficiently, use C<obsolete_attachments> instead.
 
 =cut
 
 sub obsolete_attachment {
     my ( $self, $attachment_id ) = @_;
+    return $self->obsolete_attachments($attachment_id);
+}
 
-    my $url = sprintf( "%s/bug/attachment/%s", $self->{base_url}, $attachment_id );
+=head2 obsolete_attachments
+
+    $client->obsolete_attachments(@attachment_ids);
+
+Marks one or more attachments as obsolete in a single API request.
+
+=cut
+
+sub obsolete_attachments {
+    my ( $self, @attachment_ids ) = @_;
+
+    return unless @attachment_ids;
+
+    # Use the first id in the URL (Bugzilla ignores it when ids[] is provided)
+    my $url = sprintf( "%s/bug/attachment/%s", $self->{base_url}, $attachment_ids[0] );
 
     my $payload = {
-        ids         => [$attachment_id],
+        ids         => \@attachment_ids,
         is_obsolete => JSON::true,
     };
 
@@ -388,7 +405,7 @@ sub obsolete_attachment {
     );
 
     if ( !$response->is_success ) {
-        GitBz::Exception::Bugzilla->throw( "Failed to obsolete attachment: " . $response->status_line );
+        GitBz::Exception::Bugzilla->throw( "Failed to obsolete attachments: " . $response->status_line );
     }
 
     return decode_json( $response->content );
