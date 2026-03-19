@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- [#49] Set custom User-Agent header to allow git-bz through Anubis bot protection
+  - LWP::UserAgent previously sent `libwww-perl/X.XX` which Anubis blocks as a bot
+  - Now sends `git-bz-perl/1.0 (Bugzilla REST client)` for easy allow-listing
 - [#42] Cancel attach when edit file is cleared
   - Clearing the editor file during `git bz attach -e` now aborts the operation cleanly
   - Matches the behaviour of the original git-bz tool
