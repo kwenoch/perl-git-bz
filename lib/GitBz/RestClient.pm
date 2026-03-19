@@ -48,6 +48,7 @@ use Encode qw(encode decode);
 use GitBz::Cache;
 use GitBz::Exception;
 use URI::Escape qw( uri_escape_utf8 );
+use GitBz::Version;
 
 =head2 new
 
@@ -67,7 +68,9 @@ sub new {
         $args{path} || ''
     );
 
-    my $ua = LWP::UserAgent->new();
+    my $ua = LWP::UserAgent->new(
+        agent => "git-bz-perl/$GitBz::Version::VERSION (Bugzilla REST client)",
+    );
     $ua->timeout( $args{timeout} || 30 );
     $ua->ssl_opts( verify_hostname => 0 );
 
