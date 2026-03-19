@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive `git bz create` also benefits from the cache when prompting for
     product, component, and version
 
+### Changed
+
+- [#48] Obsolete attachments in a single batched API call instead of one call per attachment
+  - Reduces API round-trips when attaching patches that replace multiple existing attachments
+
 ### Fixed
 
 - [#42] Cancel attach when edit file is cleared
