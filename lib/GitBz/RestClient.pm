@@ -98,14 +98,25 @@ sub login {
     $self->{username} = $username if $username;
     $self->{password} = $password if $password;
 
-    my $response = $self->{ua}->get(
-        sprintf(
-            "%s/login?login=%s&password=%s",
-            $self->{base_url},
-            uri_escape_utf8($self->{username}),
-            uri_escape_utf8($self->{password})
-        )
+    my $login_url = sprintf(
+        "%s/login?login=%s&password=%s",
+        $self->{base_url},
+        uri_escape_utf8( $self->{username} ),
+        uri_escape_utf8( $self->{password} )
     );
+
+    if ( $ENV{DEBUG} ) {
+        my $masked = sprintf( "%s/login?login=%s&password=***", $self->{base_url}, uri_escape_utf8($self->{username}) );
+        warn "DEBUG: Login URL: $masked\n";
+    }
+
+    my $response = $self->{ua}->get($login_url);
+
+    if ( $ENV{DEBUG} ) {
+        warn "DEBUG: Login response status: " . $response->status_line . "\n";
+        warn "DEBUG: Login response headers:\n" . $response->headers->as_string;
+        warn "DEBUG: Login response body:\n" . $response->content . "\n";
+    }
 
     if ( $response->is_success ) {
         my $data = decode_json( $response->content );
