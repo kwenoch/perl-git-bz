@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- [#51] Add `GitBz::Version` module as the single source of truth for the version string
+  - User-Agent header now reports the actual release version (e.g. `git-bz-perl/v1.0.3`) instead of the hardcoded `1.0`
+- [#51] Add CI/CD release automation
+  - `check-changelog` job blocks merge requests that do not include a `CHANGELOG.md` update
+  - `tag-release` job auto-stamps `## [Unreleased]` with the version and date on merge, commits the result back to `main`, and creates the git tag
+  - Add `scripts/stamp-changelog.pl` to perform the CHANGELOG stamping
 - [#41] Support for assignee field in `attach -e` and `edit` commands
   - View and edit the assignee field in interactive editor
   - Template defaults to current user's email for easy self-assignment

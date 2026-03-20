@@ -8,6 +8,7 @@
 
 stages:
   - Run tests
+  - release
 
 "Run on Perl":
   stage: Run tests
@@ -23,6 +24,61 @@ stages:
     reports:
       junit: junit.xml
     when: always
+
+check-changelog:
+  stage: Run tests
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache git
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - |
+      if ! grep -q "^## \[Unreleased\]" CHANGELOG.md; then
+        echo "ERROR: '## [Unreleased]' section missing from CHANGELOG.md"
+        exit 1
+      fi
+    - |
+      if git diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" "$CI_COMMIT_SHA" | grep -q "^CHANGELOG.md$"; then
+        echo "CHANGELOG.md updated. OK."
+      else
+        echo "ERROR: CHANGELOG.md was not updated in this merge request."
+        echo "Please add an entry under '## [Unreleased]' describing your changes."
+        exit 1
+      fi
+
+tag-release:
+  stage: release
+  image: alpine:latest
+  # NOTE: CI_JOB_TOKEN must be allowed to push to the default branch.
+  # If your branch protection rules block this, create a Project Access Token
+  # with 'write_repository' scope, store it as CI variable RELEASE_TOKEN, and
+  # replace CI_JOB_TOKEN with RELEASE_TOKEN in the remote URL below.
+  before_script:
+    - apk add --no-cache git perl
+  variables:
+    GIT_DEPTH: "0"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - lib/GitBz/Version.pm
+  script:
+    - VERSION=$(perl -ne "print \$1 if /our \\\$VERSION = '([^']+)'/" lib/GitBz/Version.pm)
+    - echo "Version in Version.pm is ${VERSION}"
+    - |
+      if git ls-remote --tags origin | grep -q "refs/tags/${VERSION}$"; then
+        echo "Tag ${VERSION} already exists, skipping."
+        exit 0
+      fi
+    - perl scripts/stamp-changelog.pl "$VERSION"
+    - git config user.email "ci@gitlab"
+    - git config user.name "GitLab CI"
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git add CHANGELOG.md
+    - git commit -m "Release ${VERSION}"
+    - git tag "$VERSION"
+    - git push origin HEAD:$CI_DEFAULT_BRANCH "$VERSION"
+    - echo "Tagged and pushed ${VERSION}"
 
 sast:
   stage: Run tests
