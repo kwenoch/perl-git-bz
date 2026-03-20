@@ -22,14 +22,14 @@ GitBz::RestClient - Bugzilla REST API client
 =head1 SYNOPSIS
 
     use GitBz::RestClient;
-    
+
     my $client = GitBz::RestClient->new(
         host     => 'bugs.koha-community.org',
         https    => 1,
         username => $username,
         password => $password,
     );
-    
+
     $client->login();
     my $bug = $client->get_bug(12345);
 
@@ -47,6 +47,7 @@ use MIME::Base64;
 use Encode qw(encode decode);
 use GitBz::Cache;
 use GitBz::Exception;
+use URI::Escape qw( uri_escape_utf8 );
 
 =head2 new
 
@@ -97,8 +98,9 @@ sub login {
     my $response = $self->{ua}->get(
         sprintf(
             "%s/login?login=%s&password=%s",
-            $self->{base_url}, $self->{username},
-            $self->{password}
+            $self->{base_url},
+            uri_escape_utf8($self->{username}),
+            uri_escape_utf8($self->{password})
         )
     );
 
