@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `check-changelog` job blocks merge requests that do not include a `CHANGELOG.md` update
   - `tag-release` job auto-stamps `## [Unreleased]` with the version and date on merge, commits the result back to `main`, and creates the git tag
   - Add `scripts/stamp-changelog.pl` to perform the CHANGELOG stamping
+- [#51] Document the development, merge, and release workflow in `CONTRIBUTING.md`
+  - Covers branch naming, commit prefix, changelog policy, SemVer version bumps, and the automated `tag-release` pipeline
 - [#41] Support for assignee field in `attach -e` and `edit` commands
   - View and edit the assignee field in interactive editor
   - Template defaults to current user's email for easy self-assignment
