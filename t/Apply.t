@@ -21,9 +21,9 @@ use utf8;
 
 use open ':std', ':utf8';
 use Test::More;
-use Test::Exception;
 use Test::Output;
 use Test::MockModule;
+use Test::Exception;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
@@ -162,7 +162,7 @@ subtest 'apply_bug_patches feedback messages' => sub {
 };
 
 subtest 'execute with multiple bug references' => sub {
-    plan tests => 3;
+    plan tests => 4;
 
     my $commands = { client => {} };
     my $apply    = GitBz::Commands::Apply->new($commands);
@@ -200,7 +200,7 @@ subtest 'execute with multiple bug references' => sub {
         sub {
             my ( $self, $bug_ref ) = @_;
             push @applied_bugs, $bug_ref;
-            return 1;  # Simulate 1 patch applied per bug
+            return 1;    # Simulate 1 patch applied per bug
         }
     );
 
@@ -222,13 +222,35 @@ subtest 'execute with multiple bug references' => sub {
         is_deeply( \@applied_bugs, ['41891'], 'Single bug reference processed' );
     };
 
+    subtest 'skips bugs already applied' => sub {
+        plan tests => 1;
+
+        @applied_bugs = ();
+
+        $apply_mock->mock(
+            'apply_bug_with_dependencies',
+            sub {
+                my ( $self, $bug_ref ) = @_;
+                push @applied_bugs, $bug_ref;
+
+                # Also add to the package variable
+                push @GitBz::Commands::Apply::bugs_applied, $bug_ref;
+                return 1;
+            }
+        );
+
+        $apply->execute( '41891', '41891' );
+
+        is( scalar @applied_bugs, 1, 'Second duplicate bug reference was skipped' );
+    };
+
     subtest 'throws exception with no arguments' => sub {
         plan tests => 1;
 
-        dies_ok {
+        throws_ok {
             $apply->execute();
         }
-        'Throws exception when no bug references provided';
+        "GitBz::Exception";
     };
 };
 

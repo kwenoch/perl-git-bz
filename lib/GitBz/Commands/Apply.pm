@@ -115,6 +115,9 @@ sub execute {
         @bugs_applied = ();
 
         for my $bug_ref (@args) {
+            # Skip if already applied as a dependency of a previous bug
+            next if grep { $_ eq $bug_ref } @bugs_applied;
+
             $self->apply_bug_with_dependencies( $bug_ref, \%opts );
         }
     } catch {
