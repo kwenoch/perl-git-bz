@@ -369,7 +369,7 @@ sub apply_bug_patches {
         }
     }
 
-    GitBz::Exception->throw("No patch attachments found") unless @patches;
+    GitBz::Exception->throw("No patch attachments found for bug $bug_ref") unless @patches;
 
     print "\n📋 Bug $bug_ref - " . $bug->summary . "\n\n";
 
