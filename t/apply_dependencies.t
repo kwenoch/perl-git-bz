@@ -88,7 +88,8 @@ subtest 'dependency detection and prompting' => sub {
                         || $dep_status eq 'Signed Off'
                         || $dep_status eq 'Failed QA'
                         || $dep_status eq 'Passed QA'
-                        || $dep_status eq 'BLOCKED');
+                        || $dep_status eq 'BLOCKED'
+                        || $dep_status eq 'In Discussion');
     
     ok($should_prompt, 'Dependency bug status triggers prompting');
     
@@ -122,10 +123,10 @@ subtest 'applied bugs tracking' => sub {
 };
 
 subtest 'dependency status filtering' => sub {
-    plan tests => 6;
+    plan tests => 7;
     
     # Test which bug statuses should trigger dependency prompting
-    my @applicable_statuses = ('Needs Signoff', 'Signed Off', 'Failed QA', 'Passed QA', 'BLOCKED');
+    my @applicable_statuses = ('Needs Signoff', 'Signed Off', 'Failed QA', 'Passed QA', 'BLOCKED', 'In Discussion');
     my @non_applicable_statuses = ('NEW', 'ASSIGNED', 'RESOLVED', 'VERIFIED', 'CLOSED');
     
     for my $status (@applicable_statuses) {
@@ -133,7 +134,8 @@ subtest 'dependency status filtering' => sub {
                             || $status eq 'Signed Off'
                             || $status eq 'Failed QA'
                             || $status eq 'Passed QA'
-                            || $status eq 'BLOCKED');
+                            || $status eq 'BLOCKED'
+                            || $status eq 'In Discussion');
         ok($should_prompt, "Status '$status' triggers dependency prompting");
     }
     

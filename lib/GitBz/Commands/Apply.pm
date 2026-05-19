@@ -172,7 +172,8 @@ sub apply_bug_with_dependencies {
                 || $status eq 'Signed Off'
                 || $status eq 'Failed QA'
                 || $status eq 'Passed QA'
-                || $status eq 'BLOCKED' )
+                || $status eq 'BLOCKED'
+                || $status eq 'In Discussion' )
             {
 
                 print "\n📋 Bug $bug_ref depends on bug $dep_id ($status)\n";
