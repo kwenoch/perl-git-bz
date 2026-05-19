@@ -21,7 +21,7 @@ GitBz::Commands::Apply - Apply patches from Bugzilla bugs with dependency cascad
 
 =head1 SYNOPSIS
 
-    git bz apply [options] <bug-ref>
+    git bz apply [options] <bug-ref> [bug-ref ...]
     git bz apply --continue
     git bz apply --skip
     git bz apply --abort
@@ -109,14 +109,14 @@ sub execute {
             return $self->handle_git_am_state( \%opts );
         }
 
-        GitBz::Exception->throw("Usage: git bz apply [options] <bug-ref>") unless @args == 1;
-
-        my $bug_ref = $args[0];
+        GitBz::Exception->throw("Usage: git bz apply [options] <bug-ref> [bug-ref ...]") unless @args;
 
         # Reset applied bugs tracking for new apply session
         @bugs_applied = ();
 
-        my $patches_applied = $self->apply_bug_with_dependencies( $bug_ref, \%opts );
+        for my $bug_ref (@args) {
+            $self->apply_bug_with_dependencies( $bug_ref, \%opts );
+        }
     } catch {
         GitBz::Exception->throw("Apply failed: $_");
     };

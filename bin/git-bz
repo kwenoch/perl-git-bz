@@ -21,7 +21,7 @@ git-bz - Git integration with Bugzilla for Koha development
 
 =head1 SYNOPSIS
 
-    git bz apply [options] <bug-ref>
+    git bz apply [options] <bug-ref> [bug-ref ...]
     git bz attach [options] [<bug-ref>] <commit-range>
     git bz create [options]
     git bz edit [options] (<bug-ref> | <commit> | <revision-range>)

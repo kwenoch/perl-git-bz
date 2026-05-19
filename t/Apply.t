@@ -21,6 +21,7 @@ use utf8;
 
 use open ':std', ':utf8';
 use Test::More;
+use Test::Exception;
 use Test::Output;
 use Test::MockModule;
 use FindBin;
@@ -157,6 +158,77 @@ subtest 'apply_bug_patches feedback messages' => sub {
 
         like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
         is( $result, 1, "Returns 1 when 1 patch is selected interactively" );
+    };
+};
+
+subtest 'execute with multiple bug references' => sub {
+    plan tests => 3;
+
+    my $commands = { client => {} };
+    my $apply    = GitBz::Commands::Apply->new($commands);
+
+    # Mock GitBz::Bug
+    my $bug_mock = Test::MockModule->new('GitBz::Bug');
+    $bug_mock->mock(
+        'get',
+        sub {
+            my ( $client, $bug_ref ) = @_;
+            return bless {
+                _summary     => "Test bug $bug_ref summary",
+                _attachments => [
+                    {
+                        id          => $bug_ref * 1000 + 1,
+                        summary     => "Test patch for $bug_ref",
+                        is_patch    => 1,
+                        is_obsolete => 0,
+                        data        => 'bW9ja2VkIHBhdGNoIGNvbnRlbnQ='
+                    }
+                ]
+                },
+                'GitBz::Bug';
+        }
+    );
+    $bug_mock->mock( 'summary',     sub { shift->{_summary} } );
+    $bug_mock->mock( 'attachments', sub { shift->{_attachments} } );
+    $bug_mock->mock( 'depends_on',  sub { return [] } );
+
+    # Mock apply_bug_with_dependencies to track calls
+    my @applied_bugs;
+    my $apply_mock = Test::MockModule->new('GitBz::Commands::Apply');
+    $apply_mock->mock(
+        'apply_bug_with_dependencies',
+        sub {
+            my ( $self, $bug_ref ) = @_;
+            push @applied_bugs, $bug_ref;
+            return 1;  # Simulate 1 patch applied per bug
+        }
+    );
+
+    subtest 'accepts and processes multiple bug references' => sub {
+        plan tests => 2;
+
+        $apply->execute( '41891', '41892', '41893' );
+
+        is_deeply( \@applied_bugs, [ '41891', '41892', '41893' ], 'All bug references processed' );
+        is( scalar @applied_bugs, 3, 'Three bugs were applied' );
+    };
+
+    subtest 'accepts single bug reference' => sub {
+        plan tests => 1;
+
+        @applied_bugs = ();
+        $apply->execute('41891');
+
+        is_deeply( \@applied_bugs, ['41891'], 'Single bug reference processed' );
+    };
+
+    subtest 'throws exception with no arguments' => sub {
+        plan tests => 1;
+
+        dies_ok {
+            $apply->execute();
+        }
+        'Throws exception when no bug references provided';
     };
 };
 
