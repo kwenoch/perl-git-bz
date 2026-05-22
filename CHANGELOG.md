@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-05-22
 
 ### Added
 
@@ -181,7 +181,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Progress**: Non-blocking spinners with line-replacement output
 - **Validation**: Status workflow validation from Bugzilla API
 
-[Unreleased]: https://gitlab.com/koha-community/perl-git-bz/-/compare/v1.0.3...main
+[1.1.0]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.1.0
 [1.0.3]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.3
 [1.0.2]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.2
 [1.0.1]: https://gitlab.com/koha-community/perl-git-bz/-/tags/v1.0.1
