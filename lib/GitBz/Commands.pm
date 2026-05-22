@@ -218,12 +218,27 @@ sub dispatch {
 
     my $command = shift @args || '';
 
-    if ( !$command || !$COMMANDS{$command} ) {
+    # Top-level help
+    if ( !$command || $command eq '--help' || $command eq '-h' ) {
+        require Pod::Usage;
+        require FindBin;
+        Pod::Usage::pod2usage( -input => "$FindBin::RealBin/git-bz", -exitval => 0, -verbose => 2 );
+    }
+
+    if ( !$COMMANDS{$command} ) {
         print STDERR "Usage: git bz [apply|attach|create|edit|info|open] [options]\n";
         exit 1;
     }
 
     my $handler_class = $COMMANDS{$command};
+
+    # Per-command help
+    if ( grep { $_ eq '--help' || $_ eq '-h' } @args ) {
+        eval "require $handler_class" or die $@;
+        require Pod::Usage;
+        ( my $module_path = "$handler_class.pm" ) =~ s|::|/|g;
+        Pod::Usage::pod2usage( -input => $INC{$module_path}, -exitval => 0, -verbose => 2 );
+    }
 
     return try {
         eval "require $handler_class" or die $@;

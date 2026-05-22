@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- [#56] Add `--help`/`-h` support at top-level and per-command level
+  - `git bz --help` renders full synopsis, available commands, and configuration
+  - `git bz <command> --help` renders contextual help for that specific command
+  - Uses `Pod::Usage` (core Perl) to render existing POD documentation
+
 ## [1.1.0] - 2026-05-22
 
 ### Added
