@@ -15,38 +15,34 @@
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
-# stamp-changelog.pl <version>
+# open-next-changelog.pl <version>
 #
-# Stamps the ## [Unreleased] section in CHANGELOG.md with the given version
-# and today's date, and updates the reference link at the bottom.
+# Inserts a fresh ## [Unreleased] section at the top of CHANGELOG.md
+# and adds the [Unreleased] compare link.
 #
-# Usage: perl scripts/stamp-changelog.pl v1.0.4
+# Usage: perl scripts/open-next-changelog.pl v1.0.4
 
 use strict;
 use warnings;
-use POSIX qw(strftime);
 
 my $version = shift or die "Usage: $0 <version>\n";
-(my $bare = $version) =~ s/^v//;   # "1.0.4"  — used in headers and link keys
-my $tag  = "v$bare";                # "v1.0.4" — used in URLs and git tags
-my $date = strftime('%Y-%m-%d', localtime);
+(my $bare = $version) =~ s/^v//;
+my $tag = "v$bare";
+
+my $repo = 'https://gitlab.com/koha-community/perl-git-bz';
 
 open my $fh, '<', 'CHANGELOG.md' or die "Cannot read CHANGELOG.md: $!\n";
 my $content = do { local $/; <$fh> };
 close $fh;
 
-# 1. Stamp [Unreleased] -> [1.0.4] - DATE
-$content =~ s/^## \[Unreleased\]/## [$bare] - $date/m
-    or die "Could not find '## [Unreleased]' in CHANGELOG.md\n";
+# Insert fresh [Unreleased] section before the latest release heading
+$content =~ s/(## \[\Q$bare\E\])/## [Unreleased]\n\n$1/m;
 
-# 2. Update [Unreleased] compare link to become the version's tag link
-my $repo = 'https://gitlab.com/koha-community/perl-git-bz';
-$content =~ s{^\[Unreleased\]: \S+$}
-             {[$bare]: $repo/-/tags/$tag}m
-    or die "Could not find '[Unreleased]: ...' link in CHANGELOG.md\n";
+# Insert [Unreleased] compare link before the version's tag link
+$content =~ s{(\[\Q$bare\E\]: \S+)}{[Unreleased]: $repo/-/compare/$tag...main\n$1}m;
 
 open my $out, '>', 'CHANGELOG.md' or die "Cannot write CHANGELOG.md: $!\n";
 print $out $content;
 close $out;
 
-print "Stamped CHANGELOG.md: [Unreleased] -> [$bare] - $date\n";
+print "Opened CHANGELOG.md for next development cycle\n";

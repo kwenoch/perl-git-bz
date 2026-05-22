@@ -78,36 +78,38 @@ cycle, alongside the accumulated `[Unreleased]` entries.
 
 ## Release process
 
-Releases are **automated by GitLab CI**. There is no manual tagging step.
-
-When a merge request that modifies `lib/GitBz/Version.pm` is merged into
-`main`, the `tag-release` job runs and:
-
-1. Reads the new version from `lib/GitBz/Version.pm`.
-2. Skips if the tag already exists.
-3. Runs [`scripts/stamp-changelog.pl`](scripts/stamp-changelog.pl), which:
-   - Renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`.
-   - Inserts a fresh empty `## [Unreleased]` section at the top.
-   - Updates the comparison links at the bottom of `CHANGELOG.md`.
-4. Commits the stamped `CHANGELOG.md` back to `main` as `Release vX.Y.Z`.
-5. Creates and pushes the `vX.Y.Z` git tag.
-
-The new tag appears on the [Releases page](https://gitlab.com/koha-community/perl-git-bz/-/releases).
+Releases use `npm version` to bump the version, stamp the changelog, commit,
+and tag — all in one step. CI creates the GitLab release when the tag is pushed.
 
 ### To cut a release
 
-1. Open a merge request that:
-   - Bumps `our $VERSION` in `lib/GitBz/Version.pm`.
-   - Adds any final notes to `## [Unreleased]` in `CHANGELOG.md`.
-2. Get it reviewed and merged.
-3. Watch the pipeline — the `tag-release` job handles the rest.
+```bash
+npm version patch   # or minor / major
+git push --follow-tags
+```
+
+This runs the `preversion` hook which:
+
+1. Updates `our $VERSION` in `lib/GitBz/Version.pm`.
+2. Runs `scripts/stamp-changelog.pl` to stamp `## [Unreleased]` with the
+   version and today's date (removes the `[Unreleased]` header entirely).
+3. Stages all changes (`git add -u`).
+
+Then `npm version` commits as `vX.Y.Z` and creates the `vX.Y.Z` tag.
+
+The `postversion` hook then:
+
+4. Runs `scripts/open-next-changelog.pl` to insert a fresh `## [Unreleased]`
+   section above the just-released version.
+5. Commits as `Open next development cycle`.
+
+Pushing with `--follow-tags` triggers the CI `release` job, which creates
+the GitLab release entry. The tagged commit contains a clean changelog
+with no `[Unreleased]` section.
 
 ### Release token
 
-The `tag-release` job needs push access to `main`. If branch protection blocks
-`CI_JOB_TOKEN`, create a Project Access Token with `write_repository` scope,
-store it as the `RELEASE_TOKEN` CI variable, and update `.gitlab-ci.yml` to use
-it in place of `CI_JOB_TOKEN`.
+No push token is needed in CI — tagging and pushing happen locally.
 
 ## Code style
 

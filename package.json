@@ -1,0 +1,15 @@
+{
+    "name": "perl-git-bz",
+    "version": "1.0.3",
+    "description": "git-bz: a tool for integrating git with Bugzilla",
+    "scripts": {
+        "preversion": "sed -i -e \"s/^our \\$VERSION = .*/our \\$VERSION = 'v$npm_new_version';/\" lib/GitBz/Version.pm; perl scripts/stamp-changelog.pl v$npm_new_version; git add -u; rm -f lib/GitBz/Version.pm-e",
+        "postversion": "perl scripts/open-next-changelog.pl v$npm_package_version; git add CHANGELOG.md; git commit -m 'Open next development cycle'"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/koha-community/perl-git-bz.git"
+    },
+    "author": "Koha Community",
+    "license": "GPL-3.0"
+}
