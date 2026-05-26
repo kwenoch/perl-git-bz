@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#47] Apply patches from dependencies when "In discussion"
 - [#54] Ability to pass several bug numbers to apply
 
+### Fixed
+
+- [#55] Specify bug number in "Error: Apply failed: No patch attachments found" message
+
 ## [1.1.0] - 2026-05-22
 
 ### Added
