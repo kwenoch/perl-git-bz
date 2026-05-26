@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - [#47] Apply patches from dependencies when "In discussion"
+- [#54] Ability to pass several bug numbers to apply
 
 ## [1.1.0] - 2026-05-22
 
@@ -102,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.2] - 2025-12-09
 
 ### Fixed
+
 - [#30] Fix UTF-8 "Wide character in print" warnings in Progress.pm
   - Root cause: Term::ANSIColor::colored() returns strings with UTF-8 flag set (wide characters)
   - Even with STDOUT having :utf8 layer, Perl's internal state becomes inconsistent when printing these strings
@@ -120,18 +122,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Core Commands
+
 - `apply` - Apply patches from Bugzilla bugs with automatic dependency resolution
 - `attach` - Attach Git commits as patches to bugs with optional metadata editing
 - `edit` - Interactive bug metadata editing with field validation
 - `open` - Open bugs in default web browser
 
 #### Dependency Management
+
 - Automatic dependency detection and cascading when applying bugs
 - Smart filtering of dependencies by relevant statuses
 - Recursive dependency resolution with duplicate prevention
 - Interactive prompts for following dependency chains
 
 #### Bug Metadata Management
+
 - Interactive template-based editing for bug fields
 - Support for Status, Resolution, Patch-complexity, Sponsors, Sponsorship, Dependencies
 - Workflow validation for status transitions
@@ -140,6 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Formatted table display of changes before applying
 
 #### Sponsor Support
+
 - One sponsor per line in edit templates
 - Add/remove tracking with `+` and `-` indicators
 - Automatic extraction of sponsors from commit trailers (`Sponsored-by:`)
@@ -147,12 +153,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-update sponsorship status from "Seeking sponsor" to "Sponsored"
 
 #### Patch Management
+
 - Smart obsolete detection based on commit subject matching
 - Interactive patch selection when applying
 - Auto-uncomment obsoletes for matching patches in attach mode
 - Support for obsoleting attachments in edit mode
 
 #### Developer Experience
+
 - UTF-8 support throughout (commit messages, bug comments, field values)
 - Formatted table output for field changes with Unicode box drawing
 - Progress indicators with spinners for long operations
@@ -160,12 +168,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive error handling with structured exceptions
 
 #### Security & Credentials
+
 - Git credential helper integration for secure password storage
 - Support for multiple credential storage backends (keychain, libsecret, etc.)
 - Automatic approval/rejection feedback to credential helpers
 - Fallback to environment variables and git config
 
 #### Testing
+
 - Comprehensive test suite with 116 tests across 21 test files
 - Unit tests for all major components (Bug, Template, StatusWorkflow, etc.)
 - Integration tests for commands and workflows
@@ -173,6 +183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sponsor and dependency management tests
 
 #### Architecture
+
 - Modern Perl with REST API integration (no screen scraping)
 - Object-oriented design with clean separation of concerns
 - Centralized template generation and parsing (GitBz::Template)
