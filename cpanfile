@@ -7,6 +7,8 @@ requires 'MIME::Base64';
 requires 'Exception::Class';
 requires 'JSON';
 requires 'LWP::UserAgent';
+requires 'LWP::Protocol::https';
+requires 'URI';
 requires 'Text::UnicodeBox::Table';
 
 on 'test' => sub {
