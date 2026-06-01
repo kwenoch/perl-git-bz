@@ -477,7 +477,7 @@ sub attach_patches {
         my $body    = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
         GitBz::Progress::stop_spinner( $spinner, 'success', undef, 1 );
 
-        my $comment = $body || "Patch from commit " . substr( $commit->{id}, 0, 7 );
+        my $comment = $body;
 
         # Upload patch with spinner
         $spinner = GitBz::Progress::start_spinner("$counter Uploading: $description");

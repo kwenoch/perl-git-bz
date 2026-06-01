@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [#52] Omit attachment comment when commit has no body, instead of adding a noisy "Patch from commit <hash>" fallback
+
 ## [1.2.0] - 2026-06-01
 
 ### Added
