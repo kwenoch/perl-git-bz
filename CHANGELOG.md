@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [#53] `--no-comment` flag for `git bz attach` — attach patches without adding a comment
 - [#53] `--no-obsolete-comments` flag for `git bz attach` — disable the default behaviour of tagging comments for obsoleted patches as obsolete
+- [#57] Document Debian/Ubuntu system package install route in README (recommended for Koha developers)
+- [#57] Document Carton reproducible install route in README with lockfile workflow
 
 ### Fixed
 

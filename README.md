@@ -22,6 +22,36 @@ A command-line tool for integrating Git workflows with Bugzilla bug tracking. De
 
 ## Installation
 
+### Option 1: System packages (Debian/Ubuntu — recommended for Koha developers)
+
+Install all runtime dependencies from your distribution's package manager, then
+add the `bin/` directory to your PATH:
+
+```bash
+sudo apt install \
+  libmodern-perl-perl \
+  libtry-tiny-perl \
+  libipc-run3-perl \
+  libexception-class-perl \
+  libjson-perl \
+  libwww-perl \
+  liblwp-protocol-https-perl \
+  liburi-perl \
+  libtext-unicodebox-table-perl
+
+# Add to PATH (adjust path to match your clone location)
+echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+This is the fastest route for Koha developers already on Debian, Ubuntu, or
+KTD containers, as all packages are available in the standard archive.
+
+### Option 2: cpanm
+
+Install dependencies into your system (or user) Perl with
+[cpanminus](https://metacpan.org/pod/App::cpanminus):
+
 ```bash
 # Install dependencies
 cpanm --installdeps .
@@ -29,6 +59,55 @@ cpanm --installdeps .
 # Add to PATH (adjust path to match your clone location)
 echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+```
+
+To install without root access, add `--local-lib ~/perl5` and export
+`PERL5LIB=~/perl5/lib/perl5` in your shell profile.
+
+### Option 3: Carton (reproducible, version-locked install)
+
+[Carton](https://metacpan.org/pod/Carton) installs exact dependency versions
+from the committed `cpanfile.snapshot` lockfile into a local `local/`
+directory, keeping your system Perl untouched.
+
+**Install Carton** (once, system-wide or via cpanm):
+
+```bash
+cpanm Carton
+# or: sudo apt install carton
+```
+
+**Install dependencies** from the lockfile:
+
+```bash
+carton install --deployment
+```
+
+This populates `local/lib/perl5/` with every dependency at exactly the pinned
+version. The `--deployment` flag refuses to install anything not already in the
+snapshot, ensuring reproducible builds.
+
+**Run git-bz via Carton:**
+
+```bash
+carton exec git-bz apply 12345
+```
+
+Or set `PERL5LIB` once in your shell profile so the installed `bin/git-bz`
+script finds the vendored libraries automatically:
+
+```bash
+echo 'export PERL5LIB="$HOME/git/perl-git-bz/local/lib/perl5:$PERL5LIB"' >> ~/.bashrc
+echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Updating the lockfile** (maintainers only):
+
+```bash
+carton install        # resolves latest versions satisfying cpanfile, rewrites snapshot
+git add cpanfile.snapshot
+git commit -m "Update Carton dependency lockfile"
 ```
 
 ## Configuration
