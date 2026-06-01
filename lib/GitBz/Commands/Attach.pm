@@ -23,8 +23,10 @@ GitBz::Commands::Attach - Attach Git commits as patches to Bugzilla bugs
 
     git bz attach [options] [<bug-ref>] <commit-range>
     git bz attach --edit 12345 HEAD~2..HEAD
-    git bz attach --yes HEAD  # Skip confirmation prompts
-    git bz attach HEAD        # Extracts bug ref from commit message
+    git bz attach --yes HEAD                     # Skip confirmation prompts
+    git bz attach HEAD                           # Extracts bug ref from commit message
+    git bz attach --no-comment HEAD              # Attach without adding a comment
+    git bz attach --obsolete-comments HEAD       # Hide comments for obsoleted patches
 
 =head1 DESCRIPTION
 
@@ -85,9 +87,11 @@ sub execute {
 
     GetOptionsFromArray(
         \@args,
-        'edit|e'    => \$opts{edit},
-        'yes|y'     => \$opts{yes},
-        'verbose=i' => \$opts{verbose},
+        'edit|e'           => \$opts{edit},
+        'yes|y'            => \$opts{yes},
+        'verbose=i'        => \$opts{verbose},
+        'no-comment'       => \$opts{no_comment},
+        'obsolete-comments' => \$opts{obsolete_comments},
     ) or GitBz::Exception->throw("Invalid options");
 
     # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
@@ -453,6 +457,17 @@ sub attach_patches {
             $bug->obsolete_attachments(@obsoletes_list);
             my $summary = join( ", ", map { $attach_lookup{$_} || $_ } @obsoletes_list );
             GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
+
+            if ( $opts->{obsolete_comments} ) {
+                my $spinner2 = GitBz::Progress::start_spinner("Tagging comments for obsoleted patches");
+                my @tagged   = $bug->obsolete_comments_for_attachments(@obsoletes_list);
+                if (@tagged) {
+                    GitBz::Progress::stop_spinner( $spinner2, 'success',
+                        "Tagged " . scalar(@tagged) . " comment(s) as obsolete" );
+                } else {
+                    GitBz::Progress::stop_spinner( $spinner2, 'success', "No matching comments found" );
+                }
+            }
         }
     }
 
@@ -477,7 +492,7 @@ sub attach_patches {
         my $body    = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
         GitBz::Progress::stop_spinner( $spinner, 'success', undef, 1 );
 
-        my $comment = $body;
+        my $comment = $opts->{no_comment} ? undef : $body;
 
         # Upload patch with spinner
         $spinner = GitBz::Progress::start_spinner("$counter Uploading: $description");

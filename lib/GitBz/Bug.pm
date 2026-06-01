@@ -473,4 +473,40 @@ sub obsolete_attachments {
     return $self->{client}->obsolete_attachments(@attachment_ids);
 }
 
+=head2 obsolete_comments_for_attachments
+
+    my @tagged = $bug->obsolete_comments_for_attachments(@attachment_ids);
+
+Tags as C<obsolete> any bug comments whose C<creation_time> matches that of the
+given attachment IDs. Bugzilla creates the attachment and its associated comment
+atomically, so they share a C<creation_time>. Returns the list of tagged comment IDs.
+
+=cut
+
+sub obsolete_comments_for_attachments {
+    my ( $self, @attachment_ids ) = @_;
+
+    my %target_ids = map { $_ => 1 } @attachment_ids;
+
+    my $attachments = $self->attachments;
+    my %attach_time_by_id =
+        map  { $_->{creation_time} => 1 }
+        grep { $target_ids{ $_->{id} } }
+        @$attachments;
+
+    return () unless %attach_time_by_id;
+
+    my $comments = $self->{client}->get_comments( $self->id );
+
+    my @tagged;
+    for my $comment (@$comments) {
+        if ( $attach_time_by_id{ $comment->{creation_time} } ) {
+            $self->{client}->add_comment_tag( $comment->{id}, 'obsolete' );
+            push @tagged, $comment->{id};
+        }
+    }
+
+    return @tagged;
+}
+
 1;

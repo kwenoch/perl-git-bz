@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- [#53] `--no-comment` flag for `git bz attach` — attach patches without adding a comment
+- [#53] `--obsolete-comments` flag for `git bz attach` — mark as private any bug comments associated with obsoleted patches
+
 ### Fixed
 
 - [#52] Omit attachment comment when commit has no body, instead of adding a noisy "Patch from commit <hash>" fallback

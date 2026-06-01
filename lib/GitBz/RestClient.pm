@@ -374,6 +374,61 @@ sub search_users {
     } @{ $data->{users} || [] } ];
 }
 
+=head2 get_comments
+
+    my $comments = $client->get_comments($bug_id);
+
+Retrieves all comments for a bug. Returns arrayref of comment hashrefs,
+each containing C<id>, C<creator>, C<body>, C<creation_time>, and C<is_private>.
+
+=cut
+
+sub get_comments {
+    my ( $self, $bug_id ) = @_;
+
+    my $url   = sprintf( "%s/bug/%s/comment", $self->{base_url}, $bug_id );
+    my $token = $self->get_token();
+    $url .= "?token=$token" if $token;
+
+    my $response = $self->{ua}->get($url);
+
+    if ( !$response->is_success ) {
+        GitBz::Exception::Bugzilla->throw( "Failed to get comments: " . $response->status_line );
+    }
+
+    my $data = decode_json( $response->content );
+    return $data->{bugs}{$bug_id}{comments} || [];
+}
+
+=head2 add_comment_tag
+
+    $client->add_comment_tag($comment_id, $tag);
+
+Adds a tag to a bug comment via C<PUT /rest/bug/comment/{id}/tags>.
+
+=cut
+
+sub add_comment_tag {
+    my ( $self, $comment_id, $tag ) = @_;
+
+    my $url     = sprintf( "%s/bug/comment/%s/tags", $self->{base_url}, $comment_id );
+    my $payload = { add => [$tag] };
+    my $token   = $self->get_token();
+    $payload->{token} = $token if $token;
+
+    my $response = $self->{ua}->put(
+        $url,
+        Content_Type => 'application/json',
+        Content      => encode_json($payload)
+    );
+
+    if ( !$response->is_success ) {
+        GitBz::Exception::Bugzilla->throw( "Failed to add comment tag: " . $response->status_line );
+    }
+
+    return decode_json( $response->content );
+}
+
 =head2 obsolete_attachment
 
     $client->obsolete_attachment($attachment_id);
