@@ -121,6 +121,41 @@ The test suite includes:
 - `t/git-*.t` - Git integration tests
 - `t/utf8-handling.t` - UTF-8 encoding tests
 
+## Dependency Management
+
+Runtime dependencies are declared in `cpanfile`. The `cpanfile.snapshot` lockfile
+pins every dependency (direct and transitive) to an exact version so that
+`carton install --deployment` gives a reproducible environment everywhere.
+
+**Both files must be kept in sync.** The test `t/cpanfile.t` enforces this —
+it fails if any non-core module is used in the source tree but absent from
+`cpanfile`, and also fails if `cpanfile.snapshot` is missing or does not
+provide every declared runtime requires.
+
+### Adding a new dependency
+
+1. Add the module to `cpanfile`:
+   ```
+   requires 'Some::Module';
+   ```
+2. Regenerate the lockfile:
+   ```bash
+   carton install
+   ```
+3. Commit both files together:
+   ```bash
+   git add cpanfile cpanfile.snapshot
+   git commit -m "[#NNN] Add Some::Module dependency"
+   ```
+
+### Updating existing dependencies
+
+```bash
+carton install       # resolves latest versions satisfying cpanfile, rewrites snapshot
+git add cpanfile.snapshot
+git commit -m "Update Carton dependency lockfile"
+```
+
 ## Continuous Integration
 
 The project uses GitLab CI with the following configuration:

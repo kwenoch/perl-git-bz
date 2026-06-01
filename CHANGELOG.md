@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#53] `--no-obsolete-comments` flag for `git bz attach` — disable the default behaviour of tagging comments for obsoleted patches as obsolete
 - [#57] Document Debian/Ubuntu system package install route in README (recommended for Koha developers)
 - [#57] Document Carton reproducible install route in README with lockfile workflow
+- [#57] Add `## Dependency Management` section to DEVELOPMENT.md covering how to add or update dependencies and keep `cpanfile.snapshot` in sync
 
 ### Fixed
 

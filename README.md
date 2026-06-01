@@ -102,13 +102,8 @@ echo 'export PATH="$HOME/git/perl-git-bz/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-**Updating the lockfile** (maintainers only):
-
-```bash
-carton install        # resolves latest versions satisfying cpanfile, rewrites snapshot
-git add cpanfile.snapshot
-git commit -m "Update Carton dependency lockfile"
-```
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the workflow to update the lockfile
+when adding or changing dependencies.
 
 ## Configuration
 
