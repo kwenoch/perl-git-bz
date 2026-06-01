@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#57] Document Debian/Ubuntu system package install route in README (recommended for Koha developers)
 - [#57] Document Carton reproducible install route in README with lockfile workflow
 - [#57] Add `## Dependency Management` section to DEVELOPMENT.md covering how to add or update dependencies and keep `cpanfile.snapshot` in sync
+- [#57] Add `t/cpanfile.t` to detect undeclared dependencies and snapshot drift: fails if any non-core `use` in source lacks a cpanfile entry, or if cpanfile declares a non-core module absent from `cpanfile.snapshot`
 
 ### Fixed
 
