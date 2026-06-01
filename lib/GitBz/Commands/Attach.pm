@@ -26,7 +26,7 @@ GitBz::Commands::Attach - Attach Git commits as patches to Bugzilla bugs
     git bz attach --yes HEAD                     # Skip confirmation prompts
     git bz attach HEAD                           # Extracts bug ref from commit message
     git bz attach --no-comment HEAD              # Attach without adding a comment
-    git bz attach --obsolete-comments HEAD       # Hide comments for obsoleted patches
+    git bz attach --no-obsolete-comments HEAD    # Skip tagging comments for obsoleted patches
 
 =head1 DESCRIPTION
 
@@ -90,8 +90,8 @@ sub execute {
         'edit|e'           => \$opts{edit},
         'yes|y'            => \$opts{yes},
         'verbose=i'        => \$opts{verbose},
-        'no-comment'       => \$opts{no_comment},
-        'obsolete-comments' => \$opts{obsolete_comments},
+        'no-comment'          => \$opts{no_comment},
+        'no-obsolete-comments' => \$opts{no_obsolete_comments},
     ) or GitBz::Exception->throw("Invalid options");
 
     # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
@@ -458,7 +458,7 @@ sub attach_patches {
             my $summary = join( ", ", map { $attach_lookup{$_} || $_ } @obsoletes_list );
             GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
 
-            if ( $opts->{obsolete_comments} ) {
+            unless ( $opts->{no_obsolete_comments} ) {
                 my $spinner2 = GitBz::Progress::start_spinner("Tagging comments for obsoleted patches");
                 my @tagged   = $bug->obsolete_comments_for_attachments(@obsoletes_list);
                 if (@tagged) {
