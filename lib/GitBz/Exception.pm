@@ -55,6 +55,11 @@ use Exception::Class (
         description => 'Method not implemented',
         fields      => ['method'],
     },
+    'GitBz::Exception::DependencyNotReady' => {
+        isa         => 'GitBz::Exception',
+        description => 'Dependency bug is not in an allowed follow state',
+        fields      => [ 'dep_id', 'status' ],
+    },
 );
 
 1;

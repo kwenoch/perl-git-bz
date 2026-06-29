@@ -246,7 +246,12 @@ sub dispatch {
         my $commands = $class->new();
         return $handler_class->new($commands)->execute(@args);
     } catch {
-        print STDERR "Error: $_";
+        my $err = $_;
+        if ( ref $err && $err->isa('GitBz::Exception::DependencyNotReady') ) {
+            print STDERR "Error: " . $err->error . "\n";
+            exit 3;
+        }
+        print STDERR "Error: $err\n";
         exit 1;
     };
 }
