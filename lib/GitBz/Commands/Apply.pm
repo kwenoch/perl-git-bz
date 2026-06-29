@@ -25,12 +25,20 @@ GitBz::Commands::Apply - Apply patches from Bugzilla bugs with dependency cascad
     git bz apply --continue
     git bz apply --skip
     git bz apply --abort
+    git bz apply --non-interactive [--follow-status <status>] <bug-ref> [bug-ref ...]
 
 =head1 DESCRIPTION
 
 Applies patch attachments from a Bugzilla bug to the current Git branch.
 Automatically handles dependency bugs by prompting to apply them first.
 Provides interactive patch selection and handles git-am workflow states.
+
+In C<--non-interactive> mode, patch selection is auto-confirmed (equivalent to
+C<--confirm>). Dependency bugs are auto-followed unless C<--follow-status> is
+provided to restrict which dependency states trigger automatic application.
+C<--follow-status> is repeatable and supports comma-separated values (e.g.,
+C<--follow-status "Signed Off,Passed QA">).  If a dependency has a status
+not in the allowed set, exit code 3 is returned.
 
 =cut
 
@@ -91,6 +99,8 @@ sub execute {
         'signoff|s'         => \$opts{signoff},
         'bugzilla|b=s'      => \$opts{bugzilla},
         'verbose|v+'        => \$opts{verbose},
+        'non-interactive'   => \$opts{non_interactive},
+        'follow-status=s@'  => \$opts{follow_status},
     ) or GitBz::Exception->throw("Invalid options");
 
     # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
@@ -103,6 +113,18 @@ sub execute {
 
     # Set global verbosity for Progress module
     GitBz::Progress::set_verbosity( $opts{verbose} );
+
+    # --non-interactive auto-confirms patch selection (like --confirm)
+    $opts{confirm} = 1 if $opts{non_interactive};
+
+    # Normalise --follow-status (repeatable and/or comma-separated) into a set
+    if ( $opts{follow_status} ) {
+        my %set;
+        for my $entry ( @{ $opts{follow_status} } ) {
+            $set{$_} = 1 for grep { length } split /\s*,\s*/, $entry;
+        }
+        $opts{follow_status_set} = \%set;
+    }
 
     return try {
         if ( $opts{continue} || $opts{skip} || $opts{abort} ) {
@@ -121,7 +143,9 @@ sub execute {
             $self->apply_bug_with_dependencies( $bug_ref, \%opts );
         }
     } catch {
-        GitBz::Exception->throw("Apply failed: $_");
+        my $err = $_;
+        $err->rethrow if ref $err && $err->isa('GitBz::Exception::DependencyNotReady');
+        GitBz::Exception->throw("Apply failed: $err");
     };
 }
 
@@ -180,15 +204,17 @@ sub apply_bug_with_dependencies {
             {
 
                 print "\n📋 Bug $bug_ref depends on bug $dep_id ($status)\n";
-                my $choice = $self->prompt_multi( "Follow? [(y)es, (n)o]", [ "y", "n" ] );
 
-                if ( $choice eq "y" ) {
+                if ( $self->should_follow_dependency( $dep_id, $status, $opts ) ) {
                     try {
                         # Pass the already-fetched dependency bug to avoid re-fetching
                         $self->apply_bug_with_dependencies( $dep_id, $opts, $dep_bug );
                     } catch {
+                        my $err = $_;
+                        # Preserve a typed DependencyNotReady so its exit code survives
+                        $err->rethrow if ref $err && $err->isa('GitBz::Exception::DependencyNotReady');
                         GitBz::Exception->throw(
-                            "Cannot apply cleanly patches from bug $dep_id. " . "Everything will be left dirty. $_" );
+                            "Cannot apply cleanly patches from bug $dep_id. Everything will be left dirty. $err" );
                     };
                 }
             }
@@ -685,6 +711,40 @@ sub apply_patches {
     unless ($failed) {
         rmtree($temp_dir);
     }
+}
+
+=head2 should_follow_dependency
+
+    my $follow = $apply->should_follow_dependency($dep_id, $status, \%opts);
+
+Determines whether to follow a dependency bug based on interactive mode and
+allowed status set.
+
+In interactive mode (C<--non-interactive> not set), prompts the user.
+In non-interactive mode, follows the dependency only if its status is in the
+allowed set (C<--follow-status> option). If no allowed set is configured,
+follows all dependencies. Throws C<GitBz::Exception::DependencyNotReady> if
+the status is not allowed.
+
+=cut
+
+sub should_follow_dependency {
+    my ( $self, $dep_id, $status, $opts ) = @_;
+
+    unless ( $opts->{non_interactive} ) {
+        my $choice = $self->prompt_multi( "Follow? [(y)es, (n)o]", [ "y", "n" ] );
+        return $choice eq "y";
+    }
+
+    my $allowed = $opts->{follow_status_set};
+    return 1 unless $allowed;           # no policy => follow everything
+    return 1 if $allowed->{$status};
+
+    GitBz::Exception::DependencyNotReady->throw(
+        error  => "Dependency bug $dep_id is '$status', not in the allowed follow set",
+        dep_id => $dep_id,
+        status => $status,
+    );
 }
 
 1;

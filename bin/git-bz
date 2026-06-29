@@ -39,7 +39,11 @@ Provides seamless integration between Git and Bugzilla for patch management.
 
 =item B<apply>
 
-Apply patches from a Bugzilla bug to the current Git branch.
+Apply patches from a Bugzilla bug to the current Git branch. Supports
+C<--non-interactive> to auto-confirm patch selection and optionally restrict
+automatic dependency following. Use C<--follow-status> (repeatable and/or
+comma-separated) to specify which dependency states should be auto-followed;
+if a dependency has a status not in the allowed set, exit code 3 is returned.
 
 =item B<attach>
 
