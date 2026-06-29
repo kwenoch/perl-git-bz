@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#59] `git bz attach` now prints one line per obsoleted patch instead of a single comma-delimited summary line, matching the per-item output used elsewhere (e.g. `git bz edit --obsolete`)
 - [#60] Add `--non-interactive` mode for `git bz edit`
   - Fail-fast mode for scripts and AI agents; throws on any missing required field, never prompts
+- [#61] Add `--non-interactive` and `--follow-status` support to `git bz apply`
+  - `--non-interactive`: auto-confirms patch selection without prompting, for use in scripts and AI agents
+  - `--follow-status <statuses>`: restricts automatic dependency following to bugs in the given comma-separated status list; throws `DependencyNotReady` (exit code 3) when a dependency's status is not in the allowed set
+
+### Fixed
+
+- [#61] Fix missing newline on generic STDERR error path in `dispatch()`
 
 ## [1.2.0] - 2026-06-01
 
