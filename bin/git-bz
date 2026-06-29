@@ -55,7 +55,11 @@ machine-readable output.
 
 =item B<edit>
 
-Edit bug details and add comments through an interactive editor.
+Edit bug details and add comments through an interactive editor.  Pass
+C<--non-interactive> together with field options (C<--status>, C<--comment>,
+C<--patch-complexity>, C<--sponsorship>, C<--sponsor>, C<--depends>,
+C<--assignee>, C<--qa-contact>, C<--obsolete>) to update a bug without
+opening an editor, suitable for scripted use.
 
 =item B<info>
 

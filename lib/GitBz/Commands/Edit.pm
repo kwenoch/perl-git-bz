@@ -25,11 +25,56 @@ GitBz::Commands::Edit - Edit Bugzilla bug details and add comments
     git bz edit <commit>
     git bz edit <revision-range>
     git bz edit --pushed HEAD~3..HEAD
+    git bz edit --non-interactive --status ASSIGNED --comment "Taking this" <bug-ref>
 
 =head1 DESCRIPTION
 
 Provides interactive editing of Bugzilla bug fields and comments.
 Can operate on individual bugs or extract bug references from Git commits.
+
+In C<--non-interactive> mode no editor is opened; all changes are supplied
+entirely through command-line options.  At least one field option must be
+given.  Supported field options are:
+
+=over 4
+
+=item C<--status <value>>
+
+Set the bug status (e.g. C<ASSIGNED>, C<Needs Signoff>).
+
+=item C<--comment <text>>
+
+Add a comment to the bug.
+
+=item C<--patch-complexity <value>>
+
+Set the patch-complexity custom field (e.g. C<Small patch>).
+
+=item C<--sponsorship <value>>
+
+Set the sponsorship status field.
+
+=item C<--sponsor <name>>
+
+Add a sponsor.  May be repeated to add multiple sponsors.
+
+=item C<--depends <bug-id>>
+
+Set a depends-on relationship.  May be repeated for multiple bugs.
+
+=item C<--assignee <email>>
+
+Set the assignee.
+
+=item C<--qa-contact <email>>
+
+Set the QA contact.
+
+=item C<--obsolete <attachment-id>>
+
+Mark an attachment as obsolete.  May be repeated.
+
+=back
 
 =cut
 
@@ -81,10 +126,20 @@ sub execute {
 
     GetOptionsFromArray(
         \@args,
-        'pushed'       => \$opts{pushed},
-        'fix=s'        => \$opts{fix},
-        'bugzilla|b=s' => \$opts{bugzilla},
-        'verbose=i'    => \$opts{verbose},
+        'pushed'             => \$opts{pushed},
+        'fix=s'              => \$opts{fix},
+        'bugzilla|b=s'       => \$opts{bugzilla},
+        'verbose=i'          => \$opts{verbose},
+        'non-interactive'    => \$opts{non_interactive},
+        'status=s'           => \$opts{status},
+        'comment=s'          => \$opts{comment},
+        'patch-complexity=s' => \$opts{patch_complexity},
+        'sponsorship=s'      => \$opts{sponsorship},
+        'sponsor=s@'         => \$opts{sponsors},
+        'depends=s@'         => \$opts{depends},
+        'assignee=s'         => \$opts{assignee},
+        'qa-contact=s'       => \$opts{qa_contact},
+        'obsolete=i@'        => \$opts{obsoletes},
     ) or GitBz::Exception->throw("Invalid options");
 
     # Set verbosity level: 0 (quiet), 1 (default), 2 (verbose)
@@ -137,7 +192,13 @@ sub edit_bug {
     my ( $self, $bug_ref, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = GitBz::Progress::with_spinner(
+
+    if ( $opts->{non_interactive} ) {
+        my $content = $self->build_non_interactive_content($opts);
+        return $self->update_bug( $client, $bug_ref, $content, $opts );
+    }
+
+    my $bug = GitBz::Progress::with_spinner(
         "Fetching bug $bug_ref",
         sub {
             return GitBz::Bug->get( $client, $bug_ref );
@@ -196,7 +257,13 @@ sub edit_bug_with_commits {
     my ( $self, $bug_ref, $commits, $opts ) = @_;
 
     my $client = $self->{commands}->{client};
-    my $bug    = GitBz::Progress::with_spinner(
+
+    if ( $opts->{non_interactive} ) {
+        my $content = $self->build_non_interactive_content($opts);
+        return $self->update_bug( $client, $bug_ref, $content, $opts );
+    }
+
+    my $bug = GitBz::Progress::with_spinner(
         "Fetching bug $bug_ref",
         sub {
             return GitBz::Bug->get( $client, $bug_ref );
@@ -269,6 +336,60 @@ sub create_bug_template_with_commits {
     }
 
     return $template;
+}
+
+=head2 build_non_interactive_content
+
+    my $content = $edit->build_non_interactive_content(\%opts);
+
+Builds update content from command-line options for C<--non-interactive> mode,
+bypassing the editor entirely.  Throws if no field options are provided.
+
+=cut
+
+sub build_non_interactive_content {
+    my ( $self, $opts ) = @_;
+
+    my $has_changes =
+           defined $opts->{status}
+        || defined $opts->{comment}
+        || defined $opts->{patch_complexity}
+        || defined $opts->{sponsorship}
+        || @{ $opts->{sponsors}  || [] }
+        || @{ $opts->{depends}   || [] }
+        || defined $opts->{assignee}
+        || defined $opts->{qa_contact}
+        || @{ $opts->{obsoletes} || [] };
+    GitBz::Exception->throw(
+        "--non-interactive requires at least one field option (--status, --comment, --patch-complexity, --sponsorship, --sponsor, --depends, --assignee, --qa-contact, --obsolete)"
+    ) unless $has_changes;
+
+    my $content = '';
+
+    $content .= "Status: $opts->{status}\n"                    if $opts->{status};
+    $content .= "QA-contact: $opts->{qa_contact}\n"            if defined $opts->{qa_contact};
+    $content .= "Assignee: $opts->{assignee}\n"                if $opts->{assignee};
+    $content .= "Patch-complexity: $opts->{patch_complexity}\n" if $opts->{patch_complexity};
+    $content .= "Sponsorship: $opts->{sponsorship}\n"          if $opts->{sponsorship};
+
+    for my $sponsor ( @{ $opts->{sponsors} || [] } ) {
+        $content .= "Sponsors: $sponsor\n";
+    }
+
+    for my $dep ( @{ $opts->{depends} || [] } ) {
+        $content .= "Depends: bug $dep\n";
+    }
+
+    for my $id ( @{ $opts->{obsoletes} || [] } ) {
+        $content .= "Obsoletes: $id\n";
+    }
+
+    if ( $opts->{comment} ) {
+        $content .= "\n" if $content;
+        $content .= "$opts->{comment}\n";
+    }
+
+    return $content;
 }
 
 =head2 edit_template
