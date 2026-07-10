@@ -1,6 +1,6 @@
 {
     "name": "perl-git-bz",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "git-bz: a tool for integrating git with Bugzilla",
     "scripts": {
         "preversion": "sed -i -e \"s/^our \\$VERSION = .*/our \\$VERSION = 'v$npm_new_version';/\" lib/GitBz/Version.pm; perl scripts/stamp-changelog.pl v$npm_new_version; git add -u; rm -f lib/GitBz/Version.pm-e",

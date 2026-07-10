@@ -15,6 +15,6 @@ package GitBz::Version;
 # You should have received a copy of the GNU General Public License
 # along with git-bz; if not, see <https://www.gnu.org/licenses>.
 
-our $VERSION = 'v1.2.0';
+our $VERSION = 'v1.3.0';
 
 1;
