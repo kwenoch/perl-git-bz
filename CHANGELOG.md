@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [#52] Omit attachment comment when commit has no body, instead of adding a noisy "Patch from commit <hash>" fallback
 - [#57] Fix cpanfile missing runtime dependencies: add `URI` (provides `URI::Escape`) and `LWP::Protocol::https` (required for HTTPS connections to Bugzilla)
+- [#59] `git bz attach` now prints one line per obsoleted patch instead of a single comma-delimited summary line, matching the per-item output used elsewhere (e.g. `git bz edit --obsolete`)
 
 ## [1.2.0] - 2026-06-01
 

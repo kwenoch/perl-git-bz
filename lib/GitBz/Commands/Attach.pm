@@ -455,8 +455,11 @@ sub attach_patches {
                 : "Obsoleting " . scalar(@obsoletes_list) . " attachments";
             my $spinner = GitBz::Progress::start_spinner($label);
             $bug->obsolete_attachments(@obsoletes_list);
-            my $summary = join( ", ", map { $attach_lookup{$_} || $_ } @obsoletes_list );
-            GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
+            GitBz::Progress::stop_spinner( $spinner, 'success', undef, 1 );
+
+            for my $id (@obsoletes_list) {
+                GitBz::Progress::print_success( "Obsoleted: " . ( $attach_lookup{$id} || $id ) );
+            }
 
             unless ( $opts->{no_obsolete_comments} ) {
                 my $spinner2 = GitBz::Progress::start_spinner("Tagging comments for obsoleted patches");
