@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - [#66] Fix `git bz apply --continue`/`--skip` stopping after a dependency bug's patches finish instead of resuming the bug that depended on it. The git-am state file now tracks which bug is mid-application, which bugs are still queued behind it, and which bugs are already applied, so resolving a conflict partway through a dependency chain and continuing carries on through the rest of the chain automatically
+- [#43] `git bz apply` no longer reports "Successfully applied" when a patch was already present on the branch. `git am -3` exits 0 in that case too, printing "No changes -- Patch already applied."; git-bz now detects this and reports "No changes -- patch(es) from bug X already applied" instead.
 
 ## [1.3.1] - 2026-07-14
 

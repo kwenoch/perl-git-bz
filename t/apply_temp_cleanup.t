@@ -445,7 +445,7 @@ subtest 'prepare_patch_files' => sub {
 };
 
 subtest 'apply_patches sequential application' => sub {
-    plan tests => 3;
+    plan tests => 4;
 
     my $commands = { client => {} };
     my $apply    = GitBz::Commands::Apply->new($commands);
@@ -598,6 +598,43 @@ subtest 'apply_patches sequential application' => sub {
 
         # Cleanup
         rmtree($temp_dir_path);
+    };
+
+    subtest 'reports already-applied patches without a misleading success message' => sub {
+        plan tests => 3;
+
+        my $temp_dir = File::Temp->newdir( CLEANUP => 0 );
+
+        my @patch_info = ( { file => "$temp_dir/0001-123.patch", id => 123, summary => 'Test patch 1' }, );
+
+        for my $info (@patch_info) {
+            open my $fh, '>', $info->{file} or die $!;
+            print $fh "patch content\n";
+            close $fh;
+        }
+
+        $git_mock->mock(
+            'run',
+            sub {
+                my ( $class, @args ) = @_;
+                if ( $args[0] eq 'rev-parse' && $args[1] eq '--git-dir' ) {
+                    return "/tmp/git\n";
+                }
+                if ( $args[0] eq 'am' ) {
+
+                    # This is exactly what `git am -3` prints (and returns exit 0) when
+                    # the patch content is already present on the branch.
+                    return "Applying: Test patch 1\nNo changes -- Patch already applied.\n";
+                }
+            }
+        );
+
+        my $result;
+        my $output = stdout_from( sub { $result = $apply->apply_patches( \@patch_info, $temp_dir, {} ); } );
+
+        unlike( $output, qr/Applied Test patch 1/, 'Does not claim the patch was newly applied' );
+        like( $output, qr/Already applied.*Test patch 1/i, 'Reports the patch as already applied instead' );
+        is( $result->{already_applied}, 1, 'Return value reports 1 already-applied patch' );
     };
 };
 

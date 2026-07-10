@@ -244,7 +244,15 @@ sub apply_bug_with_dependencies {
     if ($patches_applied) {
         push @bugs_applied, $bug_ref;
         print "\n";  # Add spacing before top-level result
-        GitBz::Progress::print_success("Successfully applied $patches_applied patch(es) from bug $bug_ref", 0);
+
+        my $total           = $patches_applied->{total};
+        my $already_applied = $patches_applied->{already_applied} || 0;
+
+        if ( $already_applied == $total ) {
+            GitBz::Progress::print_info("No changes -- $total patch(es) from bug $bug_ref already applied", 0);
+        } else {
+            GitBz::Progress::print_success("Successfully applied $total patch(es) from bug $bug_ref", 0);
+        }
     }
 
     return $patches_applied;
@@ -393,13 +401,18 @@ sub load_patch_info_from_temp {
 
 =head2 apply_bug_patches
 
-    $apply->apply_bug_patches($bug_ref, \%opts, $bug, \@pending);
+    my $result = $apply->apply_bug_patches($bug_ref, \%opts, $bug, \@pending);
 
 Retrieves and applies patches from a bug.
 If $bug object is provided, uses it; otherwise fetches the bug.
 
 C<$pending> is forwarded to C<apply_patches> so it can be persisted via
 C<save_state> if a patch in this bug fails to apply.
+
+Returns C<0> if no patches were applied (user declined or none selected), or a
+hashref C<< { total => $n, already_applied => $m } >> otherwise, where
+C<already_applied> counts patches that were no-ops because their content was
+already present on the branch.
 
 =cut
 
@@ -472,9 +485,12 @@ sub apply_bug_patches {
     my ( $temp_dir, $patch_info ) = $self->prepare_patch_files( \@selected_patches, $opts );
 
     # Apply all patch files
-    $self->apply_patches( $patch_info, $temp_dir, $opts, $pending, $bug_ref );
+    my $apply_result = $self->apply_patches( $patch_info, $temp_dir, $opts, $pending, $bug_ref ) || {};
 
-    return scalar @selected_patches;
+    return {
+        total           => scalar(@selected_patches),
+        already_applied => $apply_result->{already_applied} || 0,
+    };
 }
 
 =head2 prompt_multi
@@ -740,7 +756,7 @@ sub prepare_patch_files {
 
 =head2 apply_patches
 
-    $apply->apply_patches(\@patch_info, $temp_dir, \%opts, \@pending, $bug_ref);
+    my $result = $apply->apply_patches(\@patch_info, $temp_dir, \%opts, \@pending, $bug_ref);
 
 Applies patch files sequentially with 3-way merge support.
 patch_info is array of hashrefs with {file => path, id => att_id, summary => att_summary}.
@@ -749,6 +765,11 @@ C<$pending> and C<$bug_ref> identify, respectively, the bug refs still
 queued behind the current bug and the current bug itself - both are
 persisted via C<save_state> if a patch fails, so C<--continue>/C<--skip> can
 resume the rest of the dependency chain.
+
+Returns a hashref C<< { total => $n, already_applied => $m } >>.
+C<already_applied> counts patches for which C<git am -3> reported "No changes
+-- Patch already applied." (exit code 0, but no actual change was made
+because the content was already present on the branch).
 
 =cut
 
@@ -764,6 +785,7 @@ sub apply_patches {
     }
 
     my $failed = 0;
+    my $already_applied_count = 0;
     for my $i ( 0 .. $#$patch_info ) {
         my $info = $patch_info->[$i];
 
@@ -773,12 +795,21 @@ sub apply_patches {
         push @git_am_args, $info->{file};
 
         try {
-            GitBz::Git->run(@git_am_args);
+            my $am_output = GitBz::Git->run(@git_am_args);
 
-            # Show progress after successful application (print each line, don't overwrite)
+            # git am returns exit 0 both when it applies real changes and when the
+            # patch content is already present on the branch - distinguish the two
+            # so we don't report a no-op as a successful application.
             my $counter = sprintf( "[%d/%d]", $i + 1, scalar(@$patch_info) );
             my $summary = $info->{summary} || "patch $info->{id}";
-            GitBz::Progress::print_success("$counter Applied $summary", 2) if GitBz::Progress::get_verbosity() >= 1;
+            if ( $am_output && $am_output =~ /No changes -- Patch already applied\./ ) {
+                $already_applied_count++;
+                GitBz::Progress::print_info("$counter Already applied (no changes) $summary", 2)
+                    if GitBz::Progress::get_verbosity() >= 1;
+            } else {
+                GitBz::Progress::print_success("$counter Applied $summary", 2)
+                    if GitBz::Progress::get_verbosity() >= 1;
+            }
         } catch {
             $failed = 1;
 
@@ -816,6 +847,8 @@ sub apply_patches {
     unless ($failed) {
         rmtree($temp_dir);
     }
+
+    return { total => scalar(@$patch_info), already_applied => $already_applied_count };
 }
 
 =head2 should_follow_dependency

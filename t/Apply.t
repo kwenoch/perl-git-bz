@@ -123,11 +123,11 @@ subtest 'apply_bug_patches feedback messages' => sub {
         like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
         like( $output, qr/• 123 - Test patch 1/,           "Shows first patch in list" );
         like( $output, qr/• 124 - Test patch 2/,           "Shows second patch in list" );
-        is( $result, 2, "Returns 2 when 2 patches are applied" );
+        is( $result->{total}, 2, "Returns total of 2 when 2 patches are applied" );
 
         # Test with confirm option (auto-yes) - also capture output
         my $output2 = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", { confirm => 1 } ) } );
-        is( $result, 2, "Returns 2 when confirm option is used" );
+        is( $result->{total}, 2, "Returns total of 2 when confirm option is used" );
     };
 
     subtest 'interactive with partial selection' => sub {
@@ -157,8 +157,63 @@ subtest 'apply_bug_patches feedback messages' => sub {
         my $output = stdout_from( sub { $result = $apply->apply_bug_patches( "12345", {} ) } );
 
         like( $output, qr/📋 Bug 12345 - Test bug summary/, "Shows bug header" );
-        is( $result, 1, "Returns 1 when 1 patch is selected interactively" );
+        is( $result->{total}, 1, "Returns total of 1 when 1 patch is selected interactively" );
     };
+};
+
+subtest 'apply_bug_with_dependencies message reflects already-applied patches' => sub {
+    plan tests => 2;
+
+    @GitBz::Commands::Apply::bugs_applied = ();
+
+    my $bug_mock = Test::MockModule->new('GitBz::Bug');
+    $bug_mock->mock(
+        'get',
+        sub {
+            my ( $client, $bug_ref ) = @_;
+            return bless {
+                _summary     => 'Test bug summary',
+                _attachments => [
+                    {
+                        id          => 178089,
+                        summary     => 'Test patch 1',
+                        is_patch    => 1,
+                        is_obsolete => 0,
+                        data        => 'bW9ja2VkIHBhdGNoIGNvbnRlbnQ='    # base64 for "mocked patch content"
+                    }
+                ]
+                },
+                'GitBz::Bug';
+        }
+    );
+    $bug_mock->mock( 'summary',     sub { shift->{_summary} } );
+    $bug_mock->mock( 'attachments', sub { shift->{_attachments} } );
+    $bug_mock->mock( 'depends_on',  sub { return [] } );
+
+    my $git_mock = Test::MockModule->new('GitBz::Git');
+    $git_mock->mock(
+        'run',
+        sub {
+            my ( $class, @args ) = @_;
+            return "/tmp/git\n" if $args[0] eq 'rev-parse';
+
+            # This is exactly what `git am -3` prints (and returns exit 0) when
+            # the patch content is already present on the branch (bug 39088/issue 43).
+            return "Applying: Test patch 1\nNo changes -- Patch already applied.\n" if $args[0] eq 'am';
+            return '';
+        }
+    );
+
+    my $commands = { client => {} };
+    my $apply    = GitBz::Commands::Apply->new($commands);
+
+    my $output = stdout_from( sub { $apply->apply_bug_with_dependencies( '39088', { confirm => 1 } ) } );
+
+    unlike( $output, qr/Successfully applied/, 'Does not claim success when nothing actually changed' );
+    like(
+        $output, qr/No changes.*already applied/,
+        'Reports that the bug patches were already applied instead'
+    );
 };
 
 subtest 'execute with multiple bug references' => sub {
