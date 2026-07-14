@@ -39,6 +39,18 @@ our $VERBOSITY = 1;
 our $TERMINAL_WIDTH;
 our $LAST_WIDTH_CHECK = 0;
 
+# PIDs of spinner animation child processes that are currently running.
+# Safety net: if a caller starts a spinner and then dies before stop_spinner()
+# gets a chance to run (e.g. an uncaught exception between start_spinner and
+# stop_spinner), the forked child would otherwise be orphaned and keep
+# animating on the terminal forever. _cleanup_spinners() (run from the END
+# block below) guarantees these are always reaped when the process exits.
+our @ACTIVE_SPINNER_PIDS;
+
+# Test hook: when defined, overrides the "-t STDOUT" TTY detection in
+# start_spinner() so tests can force the fork-based animation path.
+our $FORCE_TTY;
+
 =head1 NAME
 
 GitBz::Progress - Progress indicators and feedback for GitBz
@@ -185,7 +197,7 @@ sub start_spinner {
     my ($message) = @_;
 
     # Check if output is to a terminal
-    my $is_tty = -t STDOUT;
+    my $is_tty = defined $FORCE_TTY ? $FORCE_TTY : ( -t STDOUT );
 
     if ( !$is_tty ) {
 
@@ -237,7 +249,10 @@ sub start_spinner {
         exit 0;
     }
 
-    # Parent process - return spinner info
+    # Parent process - track the child so it can be reaped even if we never
+    # reach stop_spinner() (see @ACTIVE_SPINNER_PIDS above)
+    push @ACTIVE_SPINNER_PIDS, $pid;
+
     return {
         message    => $message,
         is_tty     => $is_tty,
@@ -273,6 +288,7 @@ sub stop_spinner {
     if ( $spinner_obj->{pid} ) {
         kill 'TERM', $spinner_obj->{pid};
         waitpid( $spinner_obj->{pid}, 0 );
+        @ACTIVE_SPINNER_PIDS = grep { $_ != $spinner_obj->{pid} } @ACTIVE_SPINNER_PIDS;
     }
 
     if ( !$spinner_obj->{is_tty} ) {
@@ -556,6 +572,32 @@ sub finalize_progress_line {
     if ( $VERBOSITY == 1 && $is_tty ) {
         print "\n";
     }
+}
+
+=head2 _cleanup_spinners
+
+Kill and reap any spinner child processes that are still registered as
+active. This is a safety net for code paths that die between
+start_spinner() and stop_spinner() without stopping the spinner themselves -
+without it, the forked animation process would be orphaned and keep
+animating on the terminal indefinitely. Runs automatically at process exit
+via an C<END> block.
+
+=cut
+
+sub _cleanup_spinners {
+    for my $pid (@ACTIVE_SPINNER_PIDS) {
+        next unless $pid;
+        if ( kill 0, $pid ) {
+            kill 'TERM', $pid;
+            waitpid( $pid, 0 );
+        }
+    }
+    @ACTIVE_SPINNER_PIDS = ();
+}
+
+END {
+    _cleanup_spinners();
 }
 
 1;

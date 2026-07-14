@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [#63] Fix spinner processes being orphaned (spinning forever) when a network or API error occurs mid-operation in `git bz attach` (obsoleting attachments, tagging obsoleted comments, generating patches) or `git bz edit` (obsoleting an attachment); the spinner is now always stopped on error, and a safety-net cleanup reaps any spinner left running when the process exits
+
 ## [1.3.0] - 2026-07-10
 
 ### Added

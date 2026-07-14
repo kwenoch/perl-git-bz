@@ -454,7 +454,14 @@ sub attach_patches {
                 ? "Obsoleting attachment $obsoletes_list[0]"
                 : "Obsoleting " . scalar(@obsoletes_list) . " attachments";
             my $spinner = GitBz::Progress::start_spinner($label);
-            $bug->obsolete_attachments(@obsoletes_list);
+            eval {
+                $bug->obsolete_attachments(@obsoletes_list);
+                1;
+            } or do {
+                my $error = $@;
+                GitBz::Progress::stop_spinner( $spinner, 'error' );
+                die $error;
+            };
             GitBz::Progress::stop_spinner( $spinner, 'success', undef, 1 );
 
             for my $id (@obsoletes_list) {
@@ -463,7 +470,12 @@ sub attach_patches {
 
             unless ( $opts->{no_obsolete_comments} ) {
                 my $spinner2 = GitBz::Progress::start_spinner("Tagging comments for obsoleted patches");
-                my @tagged   = $bug->obsolete_comments_for_attachments(@obsoletes_list);
+                my @tagged   = eval { $bug->obsolete_comments_for_attachments(@obsoletes_list) };
+                if ($@) {
+                    my $error = $@;
+                    GitBz::Progress::stop_spinner( $spinner2, 'error' );
+                    die $error;
+                }
                 if (@tagged) {
                     GitBz::Progress::stop_spinner( $spinner2, 'success',
                         "Tagged " . scalar(@tagged) . " comment(s) as obsolete" );
@@ -491,8 +503,16 @@ sub attach_patches {
 
         # Generate patch with spinner
         my $spinner = GitBz::Progress::start_spinner("$counter Generating $filename");
-        my $patch   = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
-        my $body    = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
+        my ( $patch, $body );
+        eval {
+            $patch = GitBz::Git->format_patch( $commit->{id} . '^..' . $commit->{id} );
+            $body  = GitBz::Git->run( 'log', '--format=%b', '-1', $commit->{id} );
+            1;
+        } or do {
+            my $error = $@;
+            GitBz::Progress::stop_spinner( $spinner, 'error' );
+            die $error;
+        };
         GitBz::Progress::stop_spinner( $spinner, 'success', undef, 1 );
 
         my $comment = $opts->{no_comment} ? undef : $body;

@@ -568,7 +568,14 @@ sub update_bug {
         for my $attach_id (@obsoletes) {
             my $summary = $attach_lookup{$attach_id} || "Unknown";
             my $spinner = GitBz::Progress::start_spinner("Obsoleting attachment $attach_id");
-            $bug->obsolete_attachment($attach_id);
+            eval {
+                $bug->obsolete_attachment($attach_id);
+                1;
+            } or do {
+                my $error = $@;
+                GitBz::Progress::stop_spinner( $spinner, 'error' );
+                die $error;
+            };
             GitBz::Progress::stop_spinner( $spinner, 'success', "Obsoleted: $summary" );
             $changed = 1;
         }
