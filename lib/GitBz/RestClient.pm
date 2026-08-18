@@ -188,9 +188,12 @@ Retrieves all attachments for a bug.
 sub get_attachments {
     my ( $self, $bug_id ) = @_;
 
-    my $url   = sprintf( "%s/bug/%s/attachment", $self->{base_url}, $bug_id );
+    my $url = sprintf(
+        "%s/bug/%s/attachment?include_fields=bug_id,creation_time,creator,file_name,flags,id,is_obsolete,is_patch,is_private,last_change_time,size,summary",
+        $self->{base_url}, $bug_id
+    );
     my $token = $self->get_token();
-    $url .= "?token=$token" if $token;
+    $url .= "&token=$token" if $token;
 
     my $response = $self->{ua}->get($url);
 
