@@ -106,7 +106,8 @@ sub login {
     );
 
     if ( $ENV{DEBUG} ) {
-        my $masked = sprintf( "%s/login?login=%s&password=***", $self->{base_url}, uri_escape_utf8($self->{username}) );
+        my $masked =
+            sprintf( "%s/login?login=%s&password=***", $self->{base_url}, uri_escape_utf8( $self->{username} ) );
         warn "DEBUG: Login URL: $masked\n";
     }
 
@@ -187,7 +188,7 @@ Retrieves all attachments for a bug.
 sub get_attachments {
     my ( $self, $bug_id ) = @_;
 
-    my $url      = sprintf( "%s/bug/%s/attachment", $self->{base_url}, $bug_id );
+    my $url   = sprintf( "%s/bug/%s/attachment", $self->{base_url}, $bug_id );
     my $token = $self->get_token();
     $url .= "?token=$token" if $token;
 
@@ -365,13 +366,15 @@ sub search_users {
     my $data = decode_json( $response->content );
 
     # Return users array with relevant fields
-    return [ map {
-        {
-            email     => $_->{email},
-            real_name => $_->{real_name} || '',
-            id        => $_->{id}
-        }
-    } @{ $data->{users} || [] } ];
+    return [
+        map {
+            {
+                email     => $_->{email},
+                real_name => $_->{real_name} || '',
+                id        => $_->{id}
+            }
+        } @{ $data->{users} || [] }
+    ];
 }
 
 =head2 get_comments
@@ -532,10 +535,7 @@ sub search_bugs {
     }
 
     my $data = decode_json( $response->content );
-    return [
-        map { { id => $_->{id}, summary => $_->{summary}, status => $_->{status} } }
-            @{ $data->{bugs} || [] }
-    ];
+    return [ map { { id => $_->{id}, summary => $_->{summary}, status => $_->{status} } } @{ $data->{bugs} || [] } ];
 }
 
 =head2 get_products
