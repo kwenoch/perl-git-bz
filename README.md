@@ -518,6 +518,13 @@ When applying bugs, git-bz automatically:
 4. Applies in correct order
 5. Tracks applied bugs to prevent duplicates
 
+If a patch conflicts partway through a dependency's patch set, resolve it as
+usual (`git mergetool` or manual edits, `git add`, then `git bz apply
+--continue`/`--skip`/`--abort`). `--continue`/`--skip` resume the entire
+chain, not just the dependency that conflicted: once its remaining patches
+are applied, git-bz carries on to the bug(s) that depended on it, and to any
+other bugs originally passed on the command line.
+
 ## Sponsor Management
 
 Sponsors are managed like dependencies with add/remove tracking:

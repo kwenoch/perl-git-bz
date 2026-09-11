@@ -136,11 +136,17 @@ sub execute {
         # Reset applied bugs tracking for new apply session
         @bugs_applied = ();
 
-        for my $bug_ref (@args) {
+        # Use an explicit queue (rather than a plain foreach) so the not-yet-
+        # processed bug refs can be handed down and persisted as "pending" if
+        # a git-am conflict happens partway through - see apply_patches/save_state.
+        my @queue = @args;
+        while (@queue) {
+            my $bug_ref = shift @queue;
+
             # Skip if already applied as a dependency of a previous bug
             next if grep { $_ eq $bug_ref } @bugs_applied;
 
-            $self->apply_bug_with_dependencies( $bug_ref, \%opts );
+            $self->apply_bug_with_dependencies( $bug_ref, \%opts, undef, \@queue );
         }
     } catch {
         my $err = $_;
@@ -151,15 +157,22 @@ sub execute {
 
 =head2 apply_bug_with_dependencies
 
-    $apply->apply_bug_with_dependencies($bug_ref, \%opts, $bug);
+    $apply->apply_bug_with_dependencies($bug_ref, \%opts, $bug, \@pending);
 
 Applies a bug and its dependencies recursively.
 If $bug object is provided, uses it; otherwise fetches the bug.
 
+C<$pending> is an arrayref of bug refs still to be processed once $bug_ref
+(and anything it depends on) is fully applied - it is threaded down so that
+if a git-am conflict happens, C<apply_patches>/C<save_state> can persist it
+and C<--continue>/C<--skip> can resume the rest of the chain in a later
+process (see C<handle_git_am_state>).
+
 =cut
 
 sub apply_bug_with_dependencies {
-    my ( $self, $bug_ref, $opts, $bug ) = @_;
+    my ( $self, $bug_ref, $opts, $bug, $pending ) = @_;
+    $pending //= [];
 
     # Skip if already applied
     return if grep { $_ eq $bug_ref } @bugs_applied;
@@ -207,8 +220,11 @@ sub apply_bug_with_dependencies {
 
                 if ( $self->should_follow_dependency( $dep_id, $status, $opts ) ) {
                     try {
-                        # Pass the already-fetched dependency bug to avoid re-fetching
-                        $self->apply_bug_with_dependencies( $dep_id, $opts, $dep_bug );
+                        # Pass the already-fetched dependency bug to avoid re-fetching.
+                        # Prepend $bug_ref to $pending: once the dependency is fully
+                        # applied, resuming $bug_ref will pick up any of its other
+                        # not-yet-applied dependencies plus its own patches.
+                        $self->apply_bug_with_dependencies( $dep_id, $opts, $dep_bug, [ $bug_ref, @$pending ] );
                     } catch {
                         my $err = $_;
                         # Preserve a typed DependencyNotReady so its exit code survives
@@ -222,7 +238,7 @@ sub apply_bug_with_dependencies {
     }
 
     # Apply the main bug (pass the already-fetched bug object)
-    my $patches_applied = $self->apply_bug_patches( $bug_ref, $opts, $bug );
+    my $patches_applied = $self->apply_bug_patches( $bug_ref, $opts, $bug, $pending );
 
     # Track as applied only if patches were actually applied
     if ($patches_applied) {
@@ -261,7 +277,23 @@ sub handle_git_am_state {
     }
 
     # Check if this is a git-bz operation and get state
-    my ( $has_state, $temp_dir, $remaining_patches ) = $self->load_state($git_dir);
+    my ( $has_state, $temp_dir, $remaining_patches, $pending_bugs, $applied_bugs, $current_bug, $saved_opts ) =
+        $self->load_state($git_dir);
+
+    # --continue/--skip run as a brand-new process, so @bugs_applied starts
+    # empty here - restore what an earlier invocation had already fully
+    # applied so dependency resolution doesn't re-prompt for, or re-apply,
+    # bugs that are already done.
+    @bugs_applied = @$applied_bugs if $applied_bugs && @$applied_bugs;
+
+    # Merge back options (signoff, confirm, non-interactive, follow-status)
+    # from the original `git bz apply` invocation, since `--continue`/`--skip`
+    # don't repeat them.
+    if ($saved_opts) {
+        for my $key (qw(signoff confirm non_interactive follow_status_set)) {
+            $opts->{$key} = $saved_opts->{$key} if exists $saved_opts->{$key} && !exists $opts->{$key};
+        }
+    }
 
     if ( $opts->{abort} ) {
         GitBz::Git->run( 'am', '--abort' );
@@ -275,39 +307,46 @@ sub handle_git_am_state {
             print "\n";  # Add spacing before top-level result
             GitBz::Progress::print_error("Aborted patch application", 0);
         }
-    } elsif ( $opts->{continue} ) {
+        return;
+    }
+
+    if ( $opts->{continue} ) {
         GitBz::Git->run( 'am', '--continue' );
         print "\n";  # Add spacing before top-level result
         GitBz::Progress::print_info("Continued with current patch", 0);
-
-        # Continue with remaining patches if any
-        if ( $remaining_patches && @$remaining_patches ) {
-            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...");
-            my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
-            $self->apply_patches( $patch_info, $temp_dir, $opts );
-        } else {
-
-            # No remaining patches - just clean up
-            if ( $temp_dir && -d $temp_dir ) {
-                rmtree($temp_dir);
-            }
-        }
     } elsif ( $opts->{skip} ) {
         GitBz::Git->run( 'am', '--skip' );
         print "\n";  # Add spacing before top-level result
         GitBz::Progress::print_warning("Skipped current patch", 0);
+    } else {
+        return;
+    }
 
-        # Continue with remaining patches if any
-        if ( $remaining_patches && @$remaining_patches ) {
-            GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...");
-            my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
-            $self->apply_patches( $patch_info, $temp_dir, $opts );
-        } else {
+    # Continue with remaining patches for the bug that was mid-flight, if any
+    if ( $remaining_patches && @$remaining_patches ) {
+        GitBz::Progress::print_info("Continuing with " . scalar(@$remaining_patches) . " remaining patch(es)...");
+        my $patch_info = $self->load_patch_info_from_temp( $temp_dir, $remaining_patches );
+        $self->apply_patches( $patch_info, $temp_dir, $opts, $pending_bugs, $current_bug );
+    } elsif ( $temp_dir && -d $temp_dir ) {
+        rmtree($temp_dir);
+    }
 
-            # No remaining patches - just clean up
-            if ( $temp_dir && -d $temp_dir ) {
-                rmtree($temp_dir);
-            }
+    # If we reach this point, apply_patches did not die, so every patch for
+    # the bug that was mid-flight is now applied. Mark it done and resume
+    # whatever was queued behind it: further dependencies of the bug(s) that
+    # depended on it, then the original top-level bug references.
+    if ($current_bug) {
+        push @bugs_applied, $current_bug unless grep { $_ eq $current_bug } @bugs_applied;
+        print "\n";  # Add spacing before top-level result
+        GitBz::Progress::print_success("Successfully applied patch(es) from bug $current_bug", 0);
+    }
+
+    if ( $pending_bugs && @$pending_bugs ) {
+        my @queue = @$pending_bugs;
+        while (@queue) {
+            my $bug_ref = shift @queue;
+            next if grep { $_ eq $bug_ref } @bugs_applied;
+            $self->apply_bug_with_dependencies( $bug_ref, $opts, undef, \@queue );
         }
     }
 }
@@ -354,15 +393,18 @@ sub load_patch_info_from_temp {
 
 =head2 apply_bug_patches
 
-    $apply->apply_bug_patches($bug_ref, \%opts, $bug);
+    $apply->apply_bug_patches($bug_ref, \%opts, $bug, \@pending);
 
 Retrieves and applies patches from a bug.
 If $bug object is provided, uses it; otherwise fetches the bug.
 
+C<$pending> is forwarded to C<apply_patches> so it can be persisted via
+C<save_state> if a patch in this bug fails to apply.
+
 =cut
 
 sub apply_bug_patches {
-    my ( $self, $bug_ref, $opts, $bug ) = @_;
+    my ( $self, $bug_ref, $opts, $bug, $pending ) = @_;
 
     # Fetch bug if not already provided
     print "\n" if GitBz::Progress::get_verbosity() >= 2;    # Extra newline in verbose mode for readability
@@ -430,7 +472,7 @@ sub apply_bug_patches {
     my ( $temp_dir, $patch_info ) = $self->prepare_patch_files( \@selected_patches, $opts );
 
     # Apply all patch files
-    $self->apply_patches( $patch_info, $temp_dir, $opts );
+    $self->apply_patches( $patch_info, $temp_dir, $opts, $pending, $bug_ref );
 
     return scalar @selected_patches;
 }
@@ -521,15 +563,33 @@ sub select_patches_interactively {
 
 =head2 save_state
 
-    $apply->save_state($git_dir, $temp_dir, \@remaining_patch_ids);
+    $apply->save_state($git_dir, $temp_dir, \@remaining_patch_ids, \@pending_bugs, $current_bug, \%opts);
 
-Saves git-bz state when git-am fails for proper cleanup on abort.
-Stores temp directory location and remaining patches.
+Saves git-bz state when git-am fails for proper cleanup on abort, and so
+that C<--continue>/C<--skip> (a fresh process) can resume:
+
+=over
+
+=item * the current bug's own remaining patches
+
+=item * C<$current_bug> - the bug ref whose patches were mid-application, so
+it can be marked applied once they finish
+
+=item * C<$pending_bugs> - bug refs still queued behind it (parent bug(s) in
+a dependency chain, then the original top-level bug references)
+
+=item * the already fully-applied bugs (C<@bugs_applied>), so dependency
+resolution doesn't re-prompt for or re-apply them
+
+=item * the relevant options (signoff/confirm/non_interactive/follow-status)
+from the original invocation, since C<--continue>/C<--skip> don't repeat them
+
+=back
 
 =cut
 
 sub save_state {
-    my ( $self, $git_dir, $temp_dir, $remaining_patch_ids ) = @_;
+    my ( $self, $git_dir, $temp_dir, $remaining_patch_ids, $pending_bugs, $current_bug, $opts ) = @_;
 
     my $state_file = "$git_dir/rebase-apply/git-bz";
 
@@ -546,15 +606,39 @@ sub save_state {
         print $fh "remaining_patches=" . join( ",", @$remaining_patch_ids ) . "\n";
     }
 
+    if ( defined $current_bug && length $current_bug ) {
+        print $fh "current_bug=$current_bug\n";
+    }
+
+    if ( $pending_bugs && @$pending_bugs ) {
+        print $fh "pending_bugs=" . join( ",", @$pending_bugs ) . "\n";
+    }
+
+    if (@bugs_applied) {
+        print $fh "applied_bugs=" . join( ",", @bugs_applied ) . "\n";
+    }
+
+    if ($opts) {
+        print $fh "signoff=1\n"         if $opts->{signoff};
+        print $fh "confirm=1\n"         if $opts->{confirm};
+        print $fh "non_interactive=1\n" if $opts->{non_interactive};
+        if ( $opts->{follow_status_set} && %{ $opts->{follow_status_set} } ) {
+            print $fh "follow_status=" . join( ",", sort keys %{ $opts->{follow_status_set} } ) . "\n";
+        }
+    }
+
     close $fh;
 }
 
 =head2 load_state
 
-    my ($has_state, $temp_dir, $remaining_patches) = $apply->load_state($git_dir);
+    my ($has_state, $temp_dir, $remaining_patches, $pending_bugs, $applied_bugs, $current_bug, $saved_opts)
+        = $apply->load_state($git_dir);
 
-Loads git-bz state file if it exists. Returns whether state was found,
-the temp directory path, and array ref of remaining patch IDs.
+Loads git-bz state file if it exists. Returns whether state was found, the
+temp directory path, an array ref of remaining patch IDs, an array ref of
+pending bug refs, an array ref of already-applied bug refs, the bug ref that
+was mid-application, and a hashref of persisted options.
 
 =cut
 
@@ -568,20 +652,36 @@ sub load_state {
     open my $fh, '<', $state_file or return ( 1, undef, undef );
     my $temp_dir;
     my @remaining_patches;
+    my @pending_bugs;
+    my @applied_bugs;
+    my $current_bug;
+    my %saved_opts;
 
     while ( my $line = <$fh> ) {
+        chomp $line;
         if ( $line =~ /^temp_dir=(.+)$/ ) {
             $temp_dir = $1;
-            chomp $temp_dir;
         } elsif ( $line =~ /^remaining_patches=(.+)$/ ) {
-            my $patches_str = $1;
-            chomp $patches_str;
-            @remaining_patches = split( /,/, $patches_str );
+            @remaining_patches = split( /,/, $1 );
+        } elsif ( $line =~ /^pending_bugs=(.+)$/ ) {
+            @pending_bugs = split( /,/, $1 );
+        } elsif ( $line =~ /^applied_bugs=(.+)$/ ) {
+            @applied_bugs = split( /,/, $1 );
+        } elsif ( $line =~ /^current_bug=(.+)$/ ) {
+            $current_bug = $1;
+        } elsif ( $line =~ /^signoff=1$/ ) {
+            $saved_opts{signoff} = 1;
+        } elsif ( $line =~ /^confirm=1$/ ) {
+            $saved_opts{confirm} = 1;
+        } elsif ( $line =~ /^non_interactive=1$/ ) {
+            $saved_opts{non_interactive} = 1;
+        } elsif ( $line =~ /^follow_status=(.+)$/ ) {
+            $saved_opts{follow_status_set} = { map { $_ => 1 } split( /,/, $1 ) };
         }
     }
     close $fh;
 
-    return ( 1, $temp_dir, \@remaining_patches );
+    return ( 1, $temp_dir, \@remaining_patches, \@pending_bugs, \@applied_bugs, $current_bug, \%saved_opts );
 }
 
 =head2 prepare_patch_files
@@ -640,15 +740,20 @@ sub prepare_patch_files {
 
 =head2 apply_patches
 
-    $apply->apply_patches(\@patch_info, $temp_dir, \%opts);
+    $apply->apply_patches(\@patch_info, $temp_dir, \%opts, \@pending, $bug_ref);
 
 Applies patch files sequentially with 3-way merge support.
 patch_info is array of hashrefs with {file => path, id => att_id, summary => att_summary}.
 
+C<$pending> and C<$bug_ref> identify, respectively, the bug refs still
+queued behind the current bug and the current bug itself - both are
+persisted via C<save_state> if a patch fails, so C<--continue>/C<--skip> can
+resume the rest of the dependency chain.
+
 =cut
 
 sub apply_patches {
-    my ( $self, $patch_info, $temp_dir, $opts ) = @_;
+    my ( $self, $patch_info, $temp_dir, $opts, $pending, $bug_ref ) = @_;
 
     my $git_dir = GitBz::Git->run( 'rev-parse', '--git-dir' );
     chomp $git_dir;
@@ -687,7 +792,7 @@ sub apply_patches {
 
                 # Save which patches remain to be applied
                 my @remaining_patch_ids = map { $patch_info->[$_]->{id} } ( ( $i + 1 ) .. $#$patch_info );
-                $self->save_state( $git_dir, $temp_dir, \@remaining_patch_ids );
+                $self->save_state( $git_dir, $temp_dir, \@remaining_patch_ids, $pending, $bug_ref, $opts );
 
                 print STDERR "\n";
                 my $summary_msg = $info->{summary} ? " - $info->{summary}" : "";
