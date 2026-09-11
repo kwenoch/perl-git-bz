@@ -107,11 +107,18 @@ when adding or changing dependencies.
 
 ## Configuration
 
+`git config` writes to the repo you run it in unless you pass `--global`. Add
+`--global` only if you want the same settings available in every repo on your
+machine (e.g. you run `git bz` from more than one Koha checkout) — otherwise,
+run these commands inside each repo where you intend to use `git bz`.
+
 ### Basic Setup
 
 ```bash
-# Set default Bugzilla tracker
-git config bz.default-tracker bugs.koha-community.org
+# Tracker connection details (required — there is no built-in default for
+# these two, so git-bz can't reach Bugzilla without them)
+git config bz-tracker.bugs.koha-community.org.path /bugzilla3
+git config bz-tracker.bugs.koha-community.org.https true
 
 # Set credentials (choose one method)
 
@@ -128,6 +135,14 @@ git config bz-tracker.bugs.koha-community.org.use-git-credential true
 git config --global credential.helper osxkeychain  # macOS
 # or: libsecret (Linux), manager-core (Windows), store (cross-platform)
 git config --global credential.https://bugs.koha-community.org.username your-email@example.com
+```
+
+`bugs.koha-community.org` is already the default tracker
+(`bz.default-tracker`), so you only need to set that key if you want to point
+`git bz` at a different Bugzilla instance:
+
+```bash
+git config bz.default-tracker bugs.koha-community.org
 ```
 
 ### Optional Settings
